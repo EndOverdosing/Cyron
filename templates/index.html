@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Search & Download</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="blurry-orbs">
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+    <div id="theme-switcher" class="theme-switcher" title="Toggle Theme">
+        <i class="fas fa-sun sun-icon"></i><i class="fas fa-moon moon-icon"></i>
+    </div>
+    <main class="main-content-wrapper">
+        <header class="hero-header">
+            <h1 class="subtitle">Image Search & Downloader</h1>
+        </header>
+        <div class="url-form-container">
+            <form id="search-form" class="url-form interactive-border" onsubmit="startDownload(event)">
+                <i class="form-icon fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="query-input" placeholder="Search for images..." autocomplete="off" required>
+                <div class="quality-select-wrapper">
+                    <select id="num-images-select">
+                        <option value="10">10 Images</option>
+                        <option value="20">20 Images</option>
+                        <option value="30">30 Images</option>
+                        <option value="50">50 Images</option>
+                    </select>
+                </div>
+                <button type="submit" id="submit-button" title="Search and Download">
+                    <i class="fa-solid fa-download"></i>
+                </button>
+            </form>
+        </div>
+        <div id="output-area"></div>
+        <div id="progress-container" class="hidden">
+            <div class="progress-card interactive-border">
+                <h3>Processing your request...</h3>
+                <p id="progress-status">Initializing...</p>
+                <div class="progress-bar-container">
+                    <div id="progress-bar"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>
