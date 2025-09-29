@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Search & Download</title>
+    <title>Image Search</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -20,10 +20,10 @@
     </div>
     <main class="main-content-wrapper">
         <header class="hero-header">
-            <h1 class="subtitle">Image Search & Downloader</h1>
+            <h1 class="subtitle">Image Search</h1>
         </header>
         <div class="url-form-container">
-            <form id="search-form" class="url-form interactive-border" onsubmit="startDownload(event)">
+            <form id="search-form" class="url-form interactive-border" onsubmit="startSearch(event)">
                 <i class="form-icon fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="query-input" placeholder="Search for images..." autocomplete="off" required>
                 <div class="quality-select-wrapper">
@@ -34,15 +34,15 @@
                         <option value="50">50 Images</option>
                     </select>
                 </div>
-                <button type="submit" id="submit-button" title="Search and Download">
-                    <i class="fa-solid fa-download"></i>
+                <button type="submit" id="submit-button" title="Search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
                 </button>
             </form>
         </div>
         <div id="output-area"></div>
         <div id="progress-container" class="hidden">
             <div class="progress-card interactive-border">
-                <h3>Processing your request...</h3>
+                <h3>Searching for images...</h3>
                 <p id="progress-status">Initializing...</p>
                 <div class="progress-bar-container">
                     <div id="progress-bar"></div>

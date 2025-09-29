@@ -1,29 +1,10 @@
 import requests
 import os
-import io
-import zipfile
-from urllib.parse import urlparse
 import time
-from flask import Flask, render_template, request, send_file, jsonify
+from urllib.parse import urlparse
+from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
-
-def download_image_content(url):
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=15, stream=True)
-        response.raise_for_status()
-        
-        parsed_url = urlparse(url)
-        ext = os.path.splitext(parsed_url.path)[1]
-        if not ext or ext.lower() not in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
-            ext = '.jpg'
-        
-        return response.content, ext
-    except Exception:
-        return None, None
 
 def search_images(query, num_images):
     searx_url = "https://metasearx.com"
@@ -73,8 +54,8 @@ def search_images(query, num_images):
 def index():
     return render_template('index.html')
 
-@app.route('/download', methods=['POST'])
-def download_images_zip():
+@app.route('/search', methods=['POST'])
+def search_for_images():
     data = request.get_json()
     query = data.get('query')
     num_images = int(data.get('num_images', 10))
@@ -87,23 +68,4 @@ def download_images_zip():
     if not image_urls:
         return jsonify({'success': False, 'error': 'No images found. Try a different query.'}), 404
 
-    memory_file = io.BytesIO()
-    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for i, url in enumerate(image_urls):
-            content, ext = download_image_content(url)
-            if content:
-                filename = f"image_{i+1:03d}{ext}"
-                zf.writestr(filename, content)
-            time.sleep(0.1)
-
-    memory_file.seek(0)
-    
-    safe_query_name = "".join(c for c in query if c.isalnum() or c in (' ', '_')).rstrip()
-    zip_filename = f"{safe_query_name.replace(' ', '_')}_images.zip"
-
-    return send_file(
-        memory_file,
-        mimetype='application/zip',
-        as_attachment=True,
-        download_name=zip_filename
-    )
+    return jsonify({'success': True, 'images': image_urls})

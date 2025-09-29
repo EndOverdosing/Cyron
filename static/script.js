@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const queryInput = document.getElementById('query-input');
     const numImagesSelect = document.getElementById('num-images-select');
     const submitButton = document.getElementById('submit-button');
-    const searchForm = document.getElementById('search-form');
     const outputArea = document.getElementById('output-area');
     const progressContainer = document.getElementById('progress-container');
     const progressBar = document.getElementById('progress-bar');
@@ -59,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('mouseleave', handleMouseLeave);
     document.querySelectorAll('.interactive-border').forEach(addInteractiveBorderListeners);
 
-    async function startDownload(event) {
+    async function startSearch(event) {
         event.preventDefault();
         const query = queryInput.value.trim();
         if (!query) {
@@ -74,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             updateProgress(30, "Finding images...");
-            const response = await fetch('/download', {
+            const response = await fetch('/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -83,38 +82,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Server error: ${response.statusText}`);
+            const data = await response.json();
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || `Server error: ${response.statusText}`);
             }
 
-            updateProgress(75, "Packaging images into a ZIP file...");
-            const blob = await response.blob();
-
-            const contentDisposition = response.headers.get('Content-Disposition');
-            let filename = 'images.zip';
-            if (contentDisposition) {
-                const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-                if (filenameMatch && filenameMatch.length > 1) {
-                    filename = filenameMatch[1];
-                }
-            }
-
-            const downloadUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = downloadUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(downloadUrl);
-            a.remove();
-
-            updateProgress(100, "Download started!");
+            updateProgress(100, "Displaying results...");
+            displayImages(data.images);
             setTimeout(() => {
                 progressContainer.classList.add('hidden');
-                showSuccess(`Your download for "${query}" has started.`);
-            }, 1000);
+            }, 500);
 
         } catch (e) {
             console.error("Error:", e);
@@ -125,22 +103,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    window.startDownload = startDownload;
+    window.startSearch = startSearch;
+
+    function displayImages(imageUrls) {
+        outputArea.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.id = 'image-results-grid';
+
+        imageUrls.forEach((url, index) => {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'image-result';
+            link.style.animationDelay = `${index * 50}ms`;
+
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = `Search result ${index + 1}`;
+            img.loading = 'lazy';
+
+            link.appendChild(img);
+            grid.appendChild(link);
+        });
+
+        outputArea.appendChild(grid);
+    }
 
     function updateProgress(percentage, status) {
         progressBar.style.width = `${percentage}%`;
         progressStatus.textContent = status;
-    }
-
-    function showSuccess(message) {
-        outputArea.innerHTML = `
-            <div class="result-card">
-                <div class="result-info">
-                    <h2>Success!</h2>
-                    <div id="download-status">${message}</div>
-                </div>
-            </div>
-        `;
     }
 
     function showError(message) {
