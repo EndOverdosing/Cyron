@@ -6,7 +6,7 @@ from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
-def search_images(query, num_images):
+def search_images(query, num_images, is_safe):
     searx_url = "https://metasearx.com"
     search_url = f"{searx_url}/search"
     
@@ -22,7 +22,7 @@ def search_images(query, num_images):
             'q': query,
             'categories': 'images',
             'format': 'json',
-            'safesearch': '1',
+            'safesearch': '1' if is_safe else '0',
             'pageno': page
         }
         
@@ -59,11 +59,12 @@ def search_for_images():
     data = request.get_json()
     query = data.get('query')
     num_images = int(data.get('num_images', 10))
+    is_safe = data.get('safe_search', True)
 
     if not query:
         return jsonify({'success': False, 'error': 'Search query cannot be empty.'}), 400
 
-    image_urls = search_images(query, num_images)
+    image_urls = search_images(query, num_images, is_safe)
     
     if not image_urls:
         return jsonify({'success': False, 'error': 'No images found. Try a different query.'}), 404

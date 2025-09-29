@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const queryInput = document.getElementById('query-input');
     const numImagesSelect = document.getElementById('num-images-select');
+    const safeSearchToggle = document.getElementById('safe-search-toggle');
     const submitButton = document.getElementById('submit-button');
     const outputArea = document.getElementById('output-area');
     const progressContainer = document.getElementById('progress-container');
@@ -20,6 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (savedNumImages) {
             numImagesSelect.value = savedNumImages;
         }
+        const savedSafeSearch = getPreference('safe_search');
+        if (savedSafeSearch === 'false') {
+            safeSearchToggle.checked = false;
+        }
     }
 
     themeSwitcher.addEventListener('click', () => {
@@ -29,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     numImagesSelect.addEventListener('change', () => savePreference('num_images', numImagesSelect.value));
+    safeSearchToggle.addEventListener('change', () => savePreference('safe_search', safeSearchToggle.checked));
 
     function handleMouseMove(e) {
         document.body.style.setProperty('--cursor-x', `${e.clientX}px`);
@@ -79,6 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     query: query,
                     num_images: numImagesSelect.value,
+                    safe_search: safeSearchToggle.checked
                 })
             });
 
