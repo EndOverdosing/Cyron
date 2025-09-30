@@ -5,20 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cyron - Image Search</title>
-
     <meta name="description"
         content="Cyron is a sleek, privacy-respecting image search engine. Discover stunning visuals, instantly.">
     <meta name="keywords" content="image search, cyron, visual discovery, privacy search">
-
     <meta property="og:title" content="Cyron - Image Search">
     <meta property="og:description" content="Discover stunning visuals, instantly.">
     <meta property="og:image" content="/static/assets/banner.png">
     <meta property="og:type" content="website">
-
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/style.css">
-
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
     <link rel="apple-touch-icon" href="/static/favicon.ico">
@@ -44,11 +40,12 @@
         </header>
 
         <div class="url-form-container">
-            <form id="search-form" class="url-form interactive-border" onsubmit="handleFormSubmit(event)">
+            <form id="search-form" class="url-form interactive-border">
                 <i class="form-icon fa-solid fa-magnifying-glass"></i>
                 <div class="search-input-wrapper">
                     <input type="text" id="query-input" placeholder="Search for high-resolution images..."
-                        autocomplete="off" required>
+                        autocomplete="off">
+                    <button type="button" id="clear-search-btn" class="hidden" title="Clear search">&times;</button>
                 </div>
                 <button type="submit" id="submit-button" title="Search">
                     <i class="fa-solid fa-arrow-right"></i>
@@ -78,10 +75,18 @@
                     <input type="checkbox" id="safe-search-toggle" class="hidden" checked>
                     <label for="safe-search-toggle" class="toggle-switch"></label>
                 </div>
+                <div class="safe-search-container">
+                    <label for="proxy-mode-toggle">Proxy Mode</label>
+                    <input type="checkbox" id="proxy-mode-toggle" class="hidden">
+                    <label for="proxy-mode-toggle" class="toggle-switch"></label>
+                </div>
             </div>
         </div>
 
         <div id="output-area"></div>
+        <div id="infinite-scroll-loader" class="hidden">
+            <div class="spinner"></div>
+        </div>
 
         <div id="progress-container" class="hidden">
             <div class="progress-card interactive-border">
@@ -99,9 +104,14 @@
         <button class="lightbox-nav lightbox-prev"><i class="fa-solid fa-chevron-left"></i></button>
         <button class="lightbox-nav lightbox-next"><i class="fa-solid fa-chevron-right"></i></button>
         <img class="lightbox-image" src="" alt="Enlarged view">
+        <div class="lightbox-info">
+            <p class="lightbox-title"></p>
+            <a href="#" class="lightbox-source-link" target="_blank" rel="noopener noreferrer">View Source <i
+                    class="fa-solid fa-arrow-up-right-from-square"></i></a>
+        </div>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="/static/script.js"></script>
 </body>
 
 </html>

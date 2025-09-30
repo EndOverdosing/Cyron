@@ -34,11 +34,11 @@ def search_images_cached(query, is_safe, size, time_range, page):
         'q': final_query,
         'categories': 'images',
         'format': 'json',
-        'safesearch': '1' if is_safe else '0',
+        'safesearch': '0' if not is_safe else '1',
         'pageno': page
     }
     if size != 'any':
-        params['size'] = size
+        params['img_size'] = size
     if time_range != 'any':
         params['time_range'] = time_range
 
@@ -46,22 +46,26 @@ def search_images_cached(query, is_safe, size, time_range, page):
     
     for instance in shuffled_instances:
         try:
-            if "metasearx.com" in instance:
+            search_url = f"{instance}/search"
+            if "metasearx.com" in instance or "searx.be" in instance:
                 search_url = instance
-            else:
-                search_url = f"{instance}/search"
             
             response = requests.get(search_url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
             
             if 'results' in data and data['results']:
-                image_urls = []
+                image_results = []
                 for result in data['results']:
                     if 'img_src' in result and result['img_src']:
-                        image_urls.append(result['img_src'])
-                if image_urls:
-                    return image_urls
+                        image_info = {
+                            "img_src": result['img_src'],
+                            "url": result.get('url', '#'),
+                            "title": result.get('title', 'Untitled')
+                        }
+                        image_results.append(image_info)
+                if image_results:
+                    return image_results
         except requests.exceptions.RequestException:
             continue
             
@@ -80,20 +84,27 @@ def search_for_images():
     size = data.get('size', 'any')
     time_range = data.get('time_range', 'any')
     page = int(data.get('page', 1))
+    proxy_mode = data.get('proxy_mode', False)
 
     if not query:
         return jsonify({'success': False, 'error': 'Search query cannot be empty.'}), 400
 
-    image_urls = search_images_cached(query, is_safe, size, time_range, page)
+    image_results = search_images_cached(query, is_safe, size, time_range, page)
     
-    if image_urls is None:
+    if image_results is None:
         json_response = jsonify({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable. Please try again later.'})
         response = make_response(json_response, 503)
-    elif not image_urls:
+    elif not image_results:
         json_response = jsonify({'success': False, 'error': 'No more images found for this query.'})
         response = make_response(json_response, 404)
     else:
-        json_response = jsonify({'success': True, 'images': image_urls})
+        for item in image_results:
+            if proxy_mode:
+                item['display_src'] = f"https://ovala.vercel.app/proxy/{item['img_src']}"
+            else:
+                item['display_src'] = item['img_src']
+
+        json_response = jsonify({'success': True, 'images': image_results})
         response = make_response(json_response, 200)
 
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
