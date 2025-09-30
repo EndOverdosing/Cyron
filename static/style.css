@@ -55,6 +55,9 @@ body.light-theme {
 
 html {
     scroll-behavior: smooth;
+    overflow-y: scroll;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 body {
@@ -239,6 +242,15 @@ body.light-theme .theme-switcher .moon-icon {
     transform: translate(-50%, -50%);
     z-index: 2;
     align-items: center;
+    transition: top 0.5s ease-in-out, transform 0.5s ease-in-out;
+}
+
+body.search-active .main-content-wrapper {
+    top: 0;
+    transform: translate(-50%, 0);
+    padding-top: 2rem;
+    position: relative;
+    left: 50%;
 }
 
 @keyframes fade-in-up {
@@ -347,39 +359,6 @@ body.light-theme .interactive-border::before {
 
 #query-input::placeholder {
     color: var(--muted-text-color);
-}
-
-#suggestions-box {
-    position: absolute;
-    top: calc(100% + 10px);
-    left: 0;
-    right: 0;
-    background-color: var(--glass-base-bg);
-    border: 1px solid var(--border-color-subtle);
-    backdrop-filter: blur(14px);
-    border-radius: var(--border-radius-soft);
-    z-index: 10;
-    overflow: hidden;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s, visibility 0.2s;
-}
-
-#suggestions-box.visible {
-    opacity: 1;
-    visibility: visible;
-}
-
-#suggestions-box div {
-    padding: 0.75rem 1rem;
-    color: var(--secondary-text-color);
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-#suggestions-box div:hover {
-    background-color: var(--border-color-subtle);
-    color: var(--primary-text-color);
 }
 
 .filter-controls {
@@ -520,21 +499,39 @@ body.light-theme .progress-bar-container {
 
 #image-results-grid {
     margin-top: 1.75rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1rem;
+    column-count: 4;
+    column-gap: 1rem;
     width: 100%;
     max-width: 1400px;
     margin-left: auto;
     margin-right: auto;
 }
 
+@media (max-width: 1200px) {
+    #image-results-grid {
+        column-count: 3;
+    }
+}
+
+@media (max-width: 768px) {
+    #image-results-grid {
+        column-count: 2;
+    }
+}
+
+@media (max-width: 480px) {
+    #image-results-grid {
+        column-count: 1;
+    }
+}
+
 .image-result {
-    display: block;
+    display: inline-block;
+    width: 100%;
+    margin-bottom: 1rem;
     border-radius: var(--border-radius-soft);
     overflow: hidden;
     position: relative;
-    aspect-ratio: 1 / 1;
     background-color: var(--border-color-subtle);
     animation: fade-in-up 0.5s ease-out both;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -680,35 +677,49 @@ body.light-theme .progress-bar-container {
 .lightbox-close {
     position: absolute;
     top: 20px;
-    right: 30px;
-    font-size: 40px;
-    color: white;
-    background: none;
-    border: none;
+    right: 20px;
+    font-size: 24px;
+    color: var(--primary-text-color);
+    background: var(--glass-base-bg);
+    border: 1px solid var(--border-color-subtle);
+    backdrop-filter: blur(10px);
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: var(--transition-std);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .lightbox-close:hover {
-    transform: scale(1.2);
+    transform: scale(1.05) rotate(90deg);
+    background: var(--border-color-subtle);
 }
 
 .lightbox-nav {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
-    border: none;
-    font-size: 30px;
-    padding: 15px;
+    background: var(--glass-base-bg);
+    color: var(--primary-text-color);
+    border: 1px solid var(--border-color-subtle);
+    backdrop-filter: blur(10px);
+    font-size: 24px;
     cursor: pointer;
-    transition: background 0.2s;
-    border-radius: var(--border-radius-soft);
+    transition: var(--transition-std);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .lightbox-nav:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--border-color-subtle);
+    transform: scale(1.05);
 }
 
 .lightbox-prev {

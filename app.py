@@ -15,7 +15,8 @@ SEARX_INSTANCES = [
     "https://searx.tiekoetter.com",
     "https://search.ononoki.org",
     "https://searx.si",
-    "https://searx.garudalinux.org"
+    "https://searx.garudalinux.org",
+    "https://metasearx.com"
 ]
 
 @lru_cache(maxsize=256)
@@ -24,8 +25,13 @@ def search_images_cached(query, is_safe, size, time_range, page):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
         'Accept': 'application/json'
     }
+    
+    final_query = query
+    if ' ' in query and not (query.startswith('"') and query.endswith('"')):
+        final_query = f'"{query}"'
+
     params = {
-        'q': query,
+        'q': final_query,
         'categories': 'images',
         'format': 'json',
         'safesearch': '1' if is_safe else '0',
@@ -40,7 +46,11 @@ def search_images_cached(query, is_safe, size, time_range, page):
     
     for instance in shuffled_instances:
         try:
-            search_url = f"{instance}/search"
+            if "metasearx.com" in instance:
+                search_url = instance
+            else:
+                search_url = f"{instance}/search"
+            
             response = requests.get(search_url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
@@ -58,10 +68,11 @@ def search_images_cached(query, is_safe, size, time_range, page):
     return None
 
 @app.route('/')
+@app.route('/search')
 def index():
     return render_template('index.html')
 
-@app.route('/search', methods=['POST'])
+@app.route('/search_api', methods=['POST'])
 def search_for_images():
     data = request.get_json()
     query = data.get('query')

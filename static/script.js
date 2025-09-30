@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBar = document.getElementById('progress-bar');
     const progressStatus = document.getElementById('progress-status');
     const themeSwitcher = document.getElementById('theme-switcher');
-    const suggestionsBox = document.getElementById('suggestions-box');
     const lightbox = document.getElementById('lightbox');
     const lightboxImage = lightbox.querySelector('.lightbox-image');
 
@@ -69,14 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('mouseleave', handleMouseLeave);
     document.querySelectorAll('.interactive-border').forEach(addInteractiveBorderListeners);
 
-    async function startSearch(event) {
-        event.preventDefault();
-        const query = queryInput.value.trim();
+    async function startSearch(query) {
         if (!query) {
             showError("Please enter a search query.");
             return;
         }
 
+        document.body.classList.add('search-active');
         currentQuery = query;
         currentPage = 1;
         allImageUrls = [];
@@ -85,30 +83,37 @@ document.addEventListener('DOMContentLoaded', () => {
         progressContainer.classList.remove('hidden');
         updateProgress(10, "Initializing search...");
 
-        updateSearchHistory(query);
-        suggestionsBox.classList.remove('visible');
+        const url = new URL(window.location);
+        url.pathname = '/search';
+        url.searchParams.set('query', query);
+        window.history.pushState({ query }, '', url);
 
         await fetchAndDisplayImages(true);
 
         setTimeout(() => progressContainer.classList.add('hidden'), 500);
     }
 
-    window.startSearch = startSearch;
+    window.handleFormSubmit = function (event) {
+        event.preventDefault();
+        const query = queryInput.value.trim();
+        startSearch(query);
+    }
 
     async function fetchAndDisplayImages(isNewSearch = false) {
         if (isLoading || noMoreResults) return;
 
         isLoading = true;
         submitButton.disabled = true;
-        if (!isNewSearch) {
-            const loadMoreButton = document.getElementById('load-more-button');
-            if (loadMoreButton) loadMoreButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        const loadMoreButton = document.getElementById('load-more-button');
+        if (loadMoreButton) {
+            loadMoreButton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            loadMoreButton.disabled = true;
         }
 
         try {
             if (isNewSearch) updateProgress(30, "Finding images...");
 
-            const response = await fetch('/search', {
+            const response = await fetch('/search_api', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -123,14 +128,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (!response.ok || !data.success) {
-                if (response.status === 404) {
-                    noMoreResults = true;
-                    const loadMoreButton = document.getElementById('load-more-button');
-                    if (loadMoreButton) loadMoreButton.remove();
-                    if (isNewSearch) showError(data.error || "No images found.");
-                } else {
-                    throw new Error(data.error || `Server error: ${response.statusText}`);
-                }
+                noMoreResults = true;
+                if (loadMoreButton) loadMoreButton.remove();
+                if (isNewSearch) showError(data.error || "No images found.");
+                return;
+            }
+
+            if (!data.images || data.images.length === 0) {
+                noMoreResults = true;
+                if (loadMoreButton) loadMoreButton.remove();
+                if (isNewSearch) showError("No more images found for this query.");
                 return;
             }
 
@@ -143,13 +150,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (e) {
             console.error("Error:", e);
-            showError(e.message);
+            showError("A network error occurred or the server response was invalid. Please try again.");
         } finally {
             isLoading = false;
             submitButton.disabled = false;
-            if (!isNewSearch) {
-                const loadMoreButton = document.getElementById('load-more-button');
-                if (loadMoreButton) loadMoreButton.innerHTML = 'Load More';
+            const finalLoadMoreButton = document.getElementById('load-more-button');
+            if (finalLoadMoreButton) {
+                finalLoadMoreButton.innerHTML = 'Load More';
+                finalLoadMoreButton.disabled = false;
             }
         }
     }
@@ -181,6 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
             img.src = url;
             img.alt = `${currentQuery} result`;
             img.loading = 'lazy';
+
+            img.onerror = () => {
+                link.remove();
+            };
 
             const overlay = document.createElement('div');
             overlay.className = 'image-overlay';
@@ -226,50 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
         outputArea.innerHTML = `<div class="error-box">${message}</div>`;
     }
 
-    function getSearchHistory() {
-        return JSON.parse(getPreference('search_history') || '[]');
-    }
-
-    function updateSearchHistory(query) {
-        let history = getSearchHistory();
-        history = history.filter(item => item.toLowerCase() !== query.toLowerCase());
-        history.unshift(query);
-        if (history.length > 5) history.pop();
-        savePreference('search_history', JSON.stringify(history));
-    }
-
-    function showSuggestions(query) {
-        if (!query) {
-            suggestionsBox.classList.remove('visible');
-            return;
-        }
-        const history = getSearchHistory();
-        const filtered = history.filter(item => item.toLowerCase().includes(query.toLowerCase()));
-
-        if (filtered.length > 0) {
-            suggestionsBox.innerHTML = filtered.map(item => `<div>${item}</div>`).join('');
-            suggestionsBox.classList.add('visible');
-        } else {
-            suggestionsBox.classList.remove('visible');
-        }
-    }
-
-    queryInput.addEventListener('input', () => showSuggestions(queryInput.value));
-    queryInput.addEventListener('focus', () => showSuggestions(queryInput.value));
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-input-wrapper')) {
-            suggestionsBox.classList.remove('visible');
-        }
-    });
-
-    suggestionsBox.addEventListener('click', (e) => {
-        if (e.target.tagName === 'DIV') {
-            queryInput.value = e.target.textContent;
-            suggestionsBox.classList.remove('visible');
-            startSearch(new Event('submit'));
-        }
-    });
-
     function openLightbox(index) {
         currentLightboxIndex = index;
         lightboxImage.src = allImageUrls[index];
@@ -304,4 +272,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     applySavedPreferences();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryFromUrl = urlParams.get('query');
+    if (queryFromUrl) {
+        queryInput.value = decodeURIComponent(queryFromUrl);
+        startSearch(queryFromUrl);
+    }
 });
