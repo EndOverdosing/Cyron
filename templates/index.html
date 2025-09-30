@@ -4,9 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image Search</title>
+    <title>Cyron - Image Search</title>
+
+    <meta name="description"
+        content="Cyron is a sleek, privacy-respecting image search engine. Discover stunning visuals, instantly.">
+    <meta name="keywords" content="image search, cyron, visual discovery, privacy search">
+
+    <meta property="og:title" content="Cyron - Image Search">
+    <meta property="og:description" content="Discover stunning visuals, instantly.">
+    <meta property="og:image" content="/static/assets/banner.png">
+    <meta property="og:type" content="website">
+
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 
 <body>
@@ -15,39 +26,61 @@
         <div></div>
         <div></div>
     </div>
+
     <div id="theme-switcher" class="theme-switcher" title="Toggle Theme">
         <i class="fas fa-sun sun-icon"></i><i class="fas fa-moon moon-icon"></i>
     </div>
+
     <main class="main-content-wrapper">
         <header class="hero-header">
-            <h1 class="subtitle">Image Search</h1>
+            <h1>Cyron</h1>
+            <p class="subtitle">Discover visuals, instantly.</p>
         </header>
+
         <div class="url-form-container">
             <form id="search-form" class="url-form interactive-border" onsubmit="startSearch(event)">
                 <i class="form-icon fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="query-input" placeholder="Search for images..." autocomplete="off" required>
-                <div class="quality-select-wrapper">
-                    <select id="num-images-select">
-                        <option value="10">10 Images</option>
-                        <option value="20">20 Images</option>
-                        <option value="30">30 Images</option>
-                        <option value="50">50 Images</option>
-                    </select>
+                <div class="search-input-wrapper">
+                    <input type="text" id="query-input" placeholder="Search for high-resolution images..."
+                        autocomplete="off" required>
+                    <div id="suggestions-box"></div>
                 </div>
                 <button type="submit" id="submit-button" title="Search">
-                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <i class="fa-solid fa-arrow-right"></i>
                 </button>
             </form>
-            <div class="safe-search-container">
-                <label for="safe-search-toggle">Safe Search</label>
-                <input type="checkbox" id="safe-search-toggle" class="hidden" checked>
-                <label for="safe-search-toggle" class="toggle-switch"></label>
+
+            <div class="filter-controls">
+                <div class="select-wrapper">
+                    <select id="image-size-select" title="Image Size">
+                        <option value="any">Any Size</option>
+                        <option value="large">Large</option>
+                        <option value="medium">Medium</option>
+                        <option value="small">Small</option>
+                    </select>
+                </div>
+                <div class="select-wrapper">
+                    <select id="time-range-select" title="Time Range">
+                        <option value="any">Any Time</option>
+                        <option value="day">Past Day</option>
+                        <option value="week">Past Week</option>
+                        <option value="month">Past Month</option>
+                        <option value="year">Past Year</option>
+                    </select>
+                </div>
+                <div class="safe-search-container">
+                    <label for="safe-search-toggle">Safe Search</label>
+                    <input type="checkbox" id="safe-search-toggle" class="hidden" checked>
+                    <label for="safe-search-toggle" class="toggle-switch"></label>
+                </div>
             </div>
         </div>
+
         <div id="output-area"></div>
+
         <div id="progress-container" class="hidden">
             <div class="progress-card interactive-border">
-                <h3>Searching for images...</h3>
+                <h3>Searching the digital cosmos...</h3>
                 <p id="progress-status">Initializing...</p>
                 <div class="progress-bar-container">
                     <div id="progress-bar"></div>
@@ -55,6 +88,14 @@
             </div>
         </div>
     </main>
+
+    <div id="lightbox" class="lightbox hidden">
+        <button class="lightbox-close">&times;</button>
+        <button class="lightbox-nav lightbox-prev">&#10094;</button>
+        <button class="lightbox-nav lightbox-next">&#10095;</button>
+        <img class="lightbox-image" src="" alt="Enlarged view">
+    </div>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 

@@ -1,54 +1,61 @@
 import requests
-import os
-import time
-from urllib.parse import urlparse
-from flask import Flask, render_template, request, jsonify
+import random
+from flask import Flask, render_template, request, jsonify, make_response
+from functools import lru_cache
 
 app = Flask(__name__)
 
-def search_images(query, num_images, is_safe):
-    searx_url = "https://metasearx.com"
-    search_url = f"{searx_url}/search"
-    
+SEARX_INSTANCES = [
+    "https://searx.be",
+    "https://search.disroot.org",
+    "https://searx.work",
+    "https://search.projectsegfau.lt",
+    "https://searx.prvcy.eu",
+    "https://searx.thegpm.org",
+    "https://searx.tiekoetter.com",
+    "https://search.ononoki.org",
+    "https://searx.si",
+    "https://searx.garudalinux.org"
+]
+
+@lru_cache(maxsize=256)
+def search_images_cached(query, is_safe, size, time_range, page):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
     }
+    params = {
+        'q': query,
+        'categories': 'images',
+        'format': 'json',
+        'safesearch': '1' if is_safe else '0',
+        'pageno': page
+    }
+    if size != 'any':
+        params['size'] = size
+    if time_range != 'any':
+        params['time_range'] = time_range
+
+    shuffled_instances = random.sample(SEARX_INSTANCES, len(SEARX_INSTANCES))
     
-    images = []
-    page = 1
-    
-    while len(images) < num_images and page <= 5:
-        params = {
-            'q': query,
-            'categories': 'images',
-            'format': 'json',
-            'safesearch': '1' if is_safe else '0',
-            'pageno': page
-        }
-        
+    for instance in shuffled_instances:
         try:
+            search_url = f"{instance}/search"
             response = requests.get(search_url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
             
-            if 'results' not in data or not data['results']:
-                break
+            if 'results' in data and data['results']:
+                image_urls = []
+                for result in data['results']:
+                    if 'img_src' in result and result['img_src']:
+                        image_urls.append(result['img_src'])
+                if image_urls:
+                    return image_urls
+        except requests.exceptions.RequestException:
+            continue
             
-            for result in data['results']:
-                if len(images) >= num_images:
-                    break
-                if 'img_src' in result and result['img_src']:
-                    images.append(result['img_src'])
-                elif 'content' in result and result['content'].startswith('http'):
-                    images.append(result['content'])
-            
-            page += 1
-            time.sleep(1)
-            
-        except Exception:
-            break
-    
-    return images[:num_images]
+    return None
 
 @app.route('/')
 def index():
@@ -58,15 +65,28 @@ def index():
 def search_for_images():
     data = request.get_json()
     query = data.get('query')
-    num_images = int(data.get('num_images', 10))
     is_safe = data.get('safe_search', True)
+    size = data.get('size', 'any')
+    time_range = data.get('time_range', 'any')
+    page = int(data.get('page', 1))
 
     if not query:
         return jsonify({'success': False, 'error': 'Search query cannot be empty.'}), 400
 
-    image_urls = search_images(query, num_images, is_safe)
+    image_urls = search_images_cached(query, is_safe, size, time_range, page)
     
-    if not image_urls:
-        return jsonify({'success': False, 'error': 'No images found. Try a different query.'}), 404
+    if image_urls is None:
+        json_response = jsonify({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable. Please try again later.'})
+        response = make_response(json_response, 503)
+    elif not image_urls:
+        json_response = jsonify({'success': False, 'error': 'No more images found for this query.'})
+        response = make_response(json_response, 404)
+    else:
+        json_response = jsonify({'success': True, 'images': image_urls})
+        response = make_response(json_response, 200)
 
-    return jsonify({'success': True, 'images': image_urls})
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
