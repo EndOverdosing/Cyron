@@ -21,7 +21,7 @@
 
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#000000">
-    <link rel="apple-touch-icon" href="/static/assets/icon-192x192.png">
+    <link rel="apple-touch-icon" href="/static/assets/favicon.ico">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
@@ -103,19 +103,5 @@
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
-
-<script>
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    console.log('ServiceWorker registration successful');
-                })
-                .catch(err => {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-        });
-    }
-</script>
 
 </html>

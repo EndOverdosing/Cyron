@@ -1,5 +1,5 @@
 {
-    "name": "Cyron - Image Search",
+    "name": "Cyron",
     "short_name": "Cyron",
     "description": "A sleek, privacy-respecting image search engine. Discover stunning visuals, instantly.",
     "start_url": "/",
@@ -8,15 +8,15 @@
     "theme_color": "#000000",
     "icons": [
         {
-            "src": "/static/assets/icon-192x192.png",
+            "src": "/static/assets/favicon.ico",
             "sizes": "192x192",
-            "type": "image/png",
+            "type": "image/x-icon",
             "purpose": "any maskable"
         },
         {
-            "src": "/static/assets/icon-512x512.png",
+            "src": "/static/assets/favicon.ico",
             "sizes": "512x512",
-            "type": "image/png",
+            "type": "image/x-icon",
             "purpose": "any maskable"
         }
     ]
