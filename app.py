@@ -100,7 +100,10 @@ def search_for_images():
     else:
         for item in image_results:
             if proxy_mode:
-                item['display_src'] = f"https://ovala.vercel.app/proxy/{item['img_src']}"
+                img_src = item['img_src']
+                if img_src.startswith('//'):
+                    img_src = f"https:{img_src}"
+                item['display_src'] = f"https://ovala.vercel.app/proxy/{img_src}"
             else:
                 item['display_src'] = item['img_src']
 

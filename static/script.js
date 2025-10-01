@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const resultIndex = allImageResults.findIndex(item => item.img_src === result.img_src);
 
             const link = document.createElement('a');
-            link.href = result.url;
+            link.href = result.display_src;
             link.className = 'image-result';
             link.style.animationDelay = `${(grid.children.length % 20) * 50}ms`;
             link.dataset.index = resultIndex;
@@ -207,7 +207,14 @@ document.addEventListener('DOMContentLoaded', () => {
             img.alt = result.title;
             img.loading = 'lazy';
 
-            img.onerror = () => { link.remove(); };
+            img.onerror = function () {
+                if (this.src === result.display_src && result.display_src !== result.img_src) {
+                    result.display_src = result.img_src;
+                    this.src = result.img_src;
+                } else {
+                    link.remove();
+                }
+            };
 
             const overlay = document.createElement('div');
             overlay.className = 'image-overlay';
@@ -215,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="image-info">
                     <p class="image-title">${result.title}</p>
                     <div class="image-actions">
-                         <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="source-link" onclick="event.stopPropagation()">Source</a>
+                         <a href="${result.display_src}" target="_blank" rel="noopener noreferrer" class="source-link" onclick="event.stopPropagation()">View Image</a>
                          <button class="copy-url-btn" title="Copy Original URL"><i class="fa-solid fa-copy"></i></button>
                     </div>
                 </div>`;
@@ -256,7 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = allImageResults[index];
         lightboxImage.src = result.display_src;
         lightboxTitle.textContent = result.title;
-        lightboxSourceLink.href = result.url;
+        lightboxSourceLink.href = result.display_src;
+        lightboxSourceLink.textContent = 'View Full Image';
         lightbox.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
     }
@@ -264,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function closeLightbox() {
         lightbox.classList.add('hidden');
         lightboxImage.src = "";
+        lightboxSourceLink.textContent = 'Source';
         document.body.style.overflow = '';
     }
 
@@ -275,7 +284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = allImageResults[currentLightboxIndex];
         lightboxImage.src = result.display_src;
         lightboxTitle.textContent = result.title;
-        lightboxSourceLink.href = result.url;
+        lightboxSourceLink.href = result.display_src;
     }
 
     lightbox.querySelector('.lightbox-close').addEventListener('click', closeLightbox);
