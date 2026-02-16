@@ -88,7 +88,6 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
         yield f"data: {json.dumps({'success': False, 'error': 'No images found for this query.', 'query': query})}\n\n"
         return
     
-    # Send metadata first
     metadata = {
         'type': 'metadata',
         'success': True,
@@ -104,7 +103,6 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
     }
     yield f"data: {json.dumps(metadata)}\n\n"
     
-    # Stream each image one at a time
     for index, item in enumerate(image_results):
         if proxy_mode:
             img_src = item['img_src']
@@ -120,9 +118,8 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
             'data': item
         }
         yield f"data: {json.dumps(image_data)}\n\n"
-        time.sleep(0.1)  # Small delay between images for smooth loading
+        time.sleep(0.1)
     
-    # Send completion signal
     completion = {
         'type': 'complete',
         'total_sent': len(image_results)
@@ -563,7 +560,6 @@ def search_get(query):
             'valid_options': ['any', 'day', 'week', 'month', 'year']
         }), 400
 
-    # If streaming is requested, use SSE
     if stream:
         return Response(
             generate_streaming_results(query, safe_search, size, time_range, page, proxy_mode),
@@ -575,7 +571,6 @@ def search_get(query):
             }
         )
 
-    # Otherwise, return all results at once
     image_results = search_images_cached(query, safe_search, size, time_range, page)
     
     if image_results is None:

@@ -36,6 +36,23 @@ curl -X POST https://your-api.vercel.app/search \
   -d '{"query": "mountains", "size": "large", "safe_search": true}'
 ```
 
+### Streaming Mode (Dynamic Loading)
+
+For a better user experience with progressive image loading:
+
+**GET with streaming:**
+```
+https://your-api.vercel.app/search/mountains?stream=true
+https://your-api.vercel.app/search/wallpaper?size=large&stream=true
+```
+
+**POST with streaming:**
+```bash
+curl -X POST https://your-api.vercel.app/search/stream \
+  -H "Content-Type: application/json" \
+  -d '{"query": "mountains", "size": "large"}'
+```
+
 ## API Endpoints
 
 ### GET `/`
@@ -56,6 +73,32 @@ https://your-api.vercel.app/
   "quick_start": { ... },
   "features": [ ... ]
 }
+```
+
+### POST `/search/stream`
+Search for images with Server-Sent Events streaming. Images load one by one for dynamic, progressive rendering.
+
+**Request Body:**
+Same as `/search` endpoint
+
+**Response Type:** `text/event-stream`
+
+**Event Types:**
+- `metadata` - Initial event with query info and total count
+- `image` - Individual image data (sent for each result)
+- `complete` - Final event indicating all images loaded
+
+**Example Response Stream:**
+```
+data: {"type":"metadata","success":true,"query":"mountains","total_count":15}
+
+data: {"type":"image","index":0,"data":{"img_src":"...","title":"...","url":"..."}}
+
+data: {"type":"image","index":1,"data":{"img_src":"...","title":"...","url":"..."}}
+
+...
+
+data: {"type":"complete","total_sent":15}
 ```
 
 ### GET `/examples`
