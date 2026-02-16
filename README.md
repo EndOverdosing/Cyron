@@ -1,4 +1,4 @@
-![Rylox Logo](/static/assets/banner.png)
+![Cyron Logo](/static/assets/banner.png)
 
 # Cyron Image Search API
 
