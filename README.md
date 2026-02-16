@@ -9,12 +9,12 @@ A privacy-focused image search API powered by SearX instances. Search for images
 - Privacy-focused - No tracking or data collection
 - Fast image search across multiple SearX instances
 - Advanced filtering (size, time range, safe search)
+- **Flexible pagination - Control images per page (1-100)**
 - Built-in caching for improved performance
 - Automatic failover across multiple search providers
 - Optional image proxy support
 - CORS enabled for web applications
 - User-friendly GET and POST endpoints
-- Progressive loading with chunked pagination
 - Comprehensive error handling with helpful messages
 
 ## Quick Start
@@ -24,8 +24,9 @@ A privacy-focused image search API powered by SearX instances. Search for images
 Simply visit these URLs in your browser:
 ```
 https://your-api.vercel.app/search/mountains
-https://your-api.vercel.app/search/sunset?size=large
-https://your-api.vercel.app/search/ocean waves?time_range=week&safe_search=true
+https://your-api.vercel.app/search/mountains?per_page=20
+https://your-api.vercel.app/search/sunset?size=large&per_page=15
+https://your-api.vercel.app/search/ocean waves?time_range=week&page=2&per_page=30
 ```
 
 ### POST Requests with JSON
@@ -34,7 +35,7 @@ For more control, use POST requests with JSON:
 ```bash
 curl -X POST https://your-api.vercel.app/search \
   -H "Content-Type: application/json" \
-  -d '{"query": "mountains", "size": "large", "safe_search": true}'
+  -d '{"query": "mountains", "size": "large", "per_page": 25}'
 ```
 
 ## API Endpoints
@@ -51,8 +52,8 @@ https://your-api.vercel.app/
 ```json
 {
   "name": "Image Search API",
-  "version": "1.0",
-  "description": "Privacy-focused image search API powered by SearX instances",
+  "version": "2.0",
+  "description": "Privacy-focused image search API with flexible pagination",
   "endpoints": { ... },
   "quick_start": { ... },
   "features": [ ... ]
@@ -60,7 +61,7 @@ https://your-api.vercel.app/
 ```
 
 ### GET `/examples`
-Returns a comprehensive list of example queries organized by category with both GET and POST formats.
+Returns comprehensive example queries organized by category with both GET and POST formats.
 
 **Example:**
 ```
@@ -73,12 +74,12 @@ https://your-api.vercel.app/examples
   "success": true,
   "examples": [
     {
-      "category": "Basic Searches",
+      "category": "Pagination Examples",
       "queries": [
         {
-          "name": "Simple search",
-          "url": "/search/sunset",
-          "post_body": {"query": "sunset"}
+          "name": "Page 1 - 15 images",
+          "url": "/search/nature?page=1&per_page=15",
+          "post_body": {"query": "nature", "page": 1, "per_page": 15}
         }
       ]
     }
@@ -100,7 +101,7 @@ https://your-api.vercel.app/health
 {
   "status": "healthy",
   "service": "Image Search API",
-  "version": "1.0",
+  "version": "2.0",
   "timestamp": "2024-02-16T10:30:00Z",
   "providers": {
     "total": 11,
@@ -110,7 +111,8 @@ https://your-api.vercel.app/health
     "cache_enabled": true,
     "cors_enabled": true,
     "safe_search": true,
-    "proxy_mode": true
+    "proxy_mode": true,
+    "flexible_pagination": true
   }
 }
 ```
@@ -155,6 +157,7 @@ Search for images using JSON request body.
   "size": "large",
   "time_range": "week",
   "page": 1,
+  "per_page": 20,
   "proxy_mode": false
 }
 ```
@@ -165,6 +168,7 @@ Search for images using JSON request body.
 - `size` (optional, string): Filter by image size - `any`, `large`, `medium`, `small` (default: any)
 - `time_range` (optional, string): Filter by time - `any`, `day`, `week`, `month`, `year` (default: any)
 - `page` (optional, integer): Page number for pagination (default: 1)
+- `per_page` (optional, integer): Images per page, 1-100 (default: all available images)
 - `proxy_mode` (optional, boolean): Use proxy URLs for images (default: false)
 
 **Success Response (200):**
@@ -177,10 +181,11 @@ Search for images using JSON request body.
     "time_range": "week",
     "safe_search": true,
     "page": 1,
+    "per_page": 20,
     "proxy_mode": false
   },
   "results": {
-    "count": 15,
+    "count": 20,
     "images": [
       {
         "img_src": "https://example.com/image.jpg",
@@ -192,6 +197,10 @@ Search for images using JSON request body.
   },
   "pagination": {
     "current_page": 1,
+    "per_page": 20,
+    "total_on_page": 45,
+    "returned": 20,
+    "has_next": true,
     "next_page": 2
   }
 }
@@ -203,9 +212,10 @@ Search for images using URL path (user-friendly, browser-accessible).
 **Examples:**
 ```
 https://your-api.vercel.app/search/cats
-https://your-api.vercel.app/search/mountain landscape
-https://your-api.vercel.app/search/sunset?size=large
-https://your-api.vercel.app/search/ocean?size=large&time_range=week&safe_search=true&page=2
+https://your-api.vercel.app/search/cats?per_page=10
+https://your-api.vercel.app/search/mountain landscape?page=2&per_page=25
+https://your-api.vercel.app/search/sunset?size=large&per_page=15
+https://your-api.vercel.app/search/ocean?size=large&time_range=week&page=3&per_page=30
 ```
 
 **Query Parameters:**
@@ -213,9 +223,9 @@ https://your-api.vercel.app/search/ocean?size=large&time_range=week&safe_search=
 - `size` (optional): `any`, `large`, `medium`, `small` (default: any)
 - `time_range` (optional): `any`, `day`, `week`, `month`, `year` (default: any)
 - `page` (optional): Page number (default: 1)
+- `per_page` (optional): Images per page, 1-100 (default: all available)
 - `proxy_mode` (optional): `true` or `false` (default: false)
-- `limit` (optional): Number of images to return (default: all, use with offset for chunked loading)
-- `offset` (optional): Starting position in results (default: 0, use with limit for chunked loading)
+- `stream` (optional): `true` or `false` (default: false)
 
 **Success Response (200):**
 Same format as POST `/search` endpoint.
@@ -225,15 +235,283 @@ Same format as POST `/search` endpoint.
 - `404` - No images found for query
 - `503` - All search providers unavailable
 
+## Pagination Guide
+
+### Understanding Pagination
+
+The API supports flexible pagination allowing you to control how many images you get per page:
+
+- **Default behavior**: Returns all available images from the current page
+- **With `per_page`**: Returns only the specified number of images (1-100)
+- **Multiple pages**: Use `page` parameter to navigate through pages
+
+### Pagination Examples
+
+#### Get All Images (Default)
+```bash
+curl "https://your-api.vercel.app/search/nature"
+```
+
+Returns all available images from page 1.
+
+#### Get Specific Number Per Page
+```bash
+curl "https://your-api.vercel.app/search/nature?per_page=20"
+```
+
+Returns exactly 20 images from page 1.
+
+#### Navigate Pages with Fixed Size
+```bash
+curl "https://your-api.vercel.app/search/nature?page=1&per_page=15"
+curl "https://your-api.vercel.app/search/nature?page=2&per_page=15"
+curl "https://your-api.vercel.app/search/nature?page=3&per_page=15"
+```
+
+Gets 15 images from each page sequentially.
+
+### Frontend Pagination Implementation
+
+#### JavaScript Example - Dynamic Page Size
+```javascript
+class ImageGallery {
+  constructor(apiUrl, query) {
+    this.apiUrl = apiUrl;
+    this.query = query;
+    this.currentPage = 1;
+    this.perPage = 20;
+  }
+
+  async loadPage(page = this.currentPage) {
+    const response = await fetch(
+      `${this.apiUrl}/search/${this.query}?page=${page}&per_page=${this.perPage}`
+    );
+    const data = await response.json();
+    
+    if (data.success) {
+      this.displayImages(data.results.images);
+      this.updatePagination(data.pagination);
+    }
+  }
+
+  changePageSize(newSize) {
+    this.perPage = newSize;
+    this.currentPage = 1;
+    this.loadPage();
+  }
+
+  nextPage() {
+    this.currentPage++;
+    this.loadPage();
+  }
+
+  prevPage() {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      this.loadPage();
+    }
+  }
+
+  displayImages(images) {
+    const gallery = document.getElementById('gallery');
+    gallery.innerHTML = '';
+    
+    images.forEach(img => {
+      const imgElement = document.createElement('img');
+      imgElement.src = img.display_src;
+      imgElement.alt = img.title;
+      gallery.appendChild(imgElement);
+    });
+  }
+
+  updatePagination(pagination) {
+    document.getElementById('page-info').textContent = 
+      `Page ${pagination.current_page} - Showing ${pagination.returned} images`;
+  }
+}
+
+const gallery = new ImageGallery('https://your-api.vercel.app', 'nature');
+gallery.loadPage();
+
+document.getElementById('page-size-10').addEventListener('click', () => {
+  gallery.changePageSize(10);
+});
+
+document.getElementById('page-size-25').addEventListener('click', () => {
+  gallery.changePageSize(25);
+});
+
+document.getElementById('page-size-50').addEventListener('click', () => {
+  gallery.changePageSize(50);
+});
+
+document.getElementById('next-btn').addEventListener('click', () => {
+  gallery.nextPage();
+});
+
+document.getElementById('prev-btn').addEventListener('click', () => {
+  gallery.prevPage();
+});
+```
+
+#### React Example - Paginated Gallery
+```jsx
+import React, { useState, useEffect } from 'react';
+
+function ImageGallery() {
+  const [images, setImages] = useState([]);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
+  const [loading, setLoading] = useState(false);
+  const [pagination, setPagination] = useState(null);
+
+  useEffect(() => {
+    loadImages();
+  }, [page, perPage]);
+
+  const loadImages = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `https://your-api.vercel.app/search/nature?page=${page}&per_page=${perPage}`
+      );
+      const data = await response.json();
+      
+      if (data.success) {
+        setImages(data.results.images);
+        setPagination(data.pagination);
+      }
+    } catch (error) {
+      console.error('Error loading images:', error);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <div className="controls">
+        <select 
+          value={perPage} 
+          onChange={(e) => {
+            setPerPage(Number(e.target.value));
+            setPage(1);
+          }}
+        >
+          <option value={10}>10 per page</option>
+          <option value={20}>20 per page</option>
+          <option value={30}>30 per page</option>
+          <option value={50}>50 per page</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
+        <div className="gallery">
+          {images.map((img, index) => (
+            <img key={index} src={img.display_src} alt={img.title} />
+          ))}
+        </div>
+      )}
+
+      <div className="pagination">
+        <button 
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+        >
+          Previous
+        </button>
+        
+        <span>
+          Page {pagination?.current_page} - 
+          Showing {pagination?.returned} of {pagination?.total_on_page} images
+        </span>
+        
+        <button 
+          onClick={() => setPage(p => p + 1)}
+          disabled={!pagination?.has_next}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default ImageGallery;
+```
+
+#### Python Example - Batch Processing
+```python
+import requests
+
+def fetch_all_pages(query, per_page=25, max_pages=10):
+    all_images = []
+    api_url = 'https://your-api.vercel.app'
+    
+    for page in range(1, max_pages + 1):
+        response = requests.get(
+            f'{api_url}/search/{query}',
+            params={'page': page, 'per_page': per_page}
+        )
+        
+        data = response.json()
+        
+        if data['success']:
+            images = data['results']['images']
+            all_images.extend(images)
+            print(f"Page {page}: Got {len(images)} images")
+            
+            if not data['pagination']['has_next']:
+                break
+        else:
+            print(f"No more images at page {page}")
+            break
+    
+    return all_images
+
+images = fetch_all_pages('landscape', per_page=20, max_pages=5)
+print(f"Total images collected: {len(images)}")
+```
+
+### POST Request Pagination
+
+```bash
+curl -X POST https://your-api.vercel.app/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "sunset over mountains",
+    "size": "large",
+    "page": 1,
+    "per_page": 30
+  }'
+```
+
+```python
+import requests
+
+response = requests.post('https://your-api.vercel.app/search', json={
+    'query': 'forest landscape',
+    'size': 'large',
+    'page': 1,
+    'per_page': 25
+})
+
+data = response.json()
+if data['success']:
+    print(f"Got {data['results']['count']} images")
+    print(f"Page {data['pagination']['current_page']}")
+```
+
 ## Usage Examples
 
 ### Browser (GET)
 
 Simply paste these URLs in your browser:
 ```
-https://your-api.vercel.app/search/puppies
-https://your-api.vercel.app/search/nature wallpaper?size=large
-https://your-api.vercel.app/search/tech news?time_range=day
+https://your-api.vercel.app/search/puppies?per_page=15
+https://your-api.vercel.app/search/nature wallpaper?size=large&per_page=20
+https://your-api.vercel.app/search/tech news?time_range=day&per_page=10
 ```
 
 ### cURL (POST)
@@ -245,26 +523,27 @@ curl -X POST https://your-api.vercel.app/search \
     "size": "large",
     "time_range": "month",
     "safe_search": true,
-    "page": 1
+    "page": 1,
+    "per_page": 25
   }'
 ```
 
 ### cURL (GET)
 ```bash
-curl "https://your-api.vercel.app/search/ocean?size=large&safe_search=true"
+curl "https://your-api.vercel.app/search/ocean?size=large&per_page=20"
 ```
 
 ### Python (requests)
 ```python
 import requests
 
-# POST method
 response = requests.post('https://your-api.vercel.app/search', json={
     'query': 'forest landscape',
     'size': 'large',
     'time_range': 'week',
     'safe_search': True,
-    'page': 1
+    'page': 1,
+    'per_page': 30
 })
 
 data = response.json()
@@ -272,14 +551,12 @@ if data['success']:
     for image in data['results']['images']:
         print(f"{image['title']}: {image['img_src']}")
 
-# GET method (simpler)
-response = requests.get('https://your-api.vercel.app/search/cats?size=medium')
+response = requests.get('https://your-api.vercel.app/search/cats?size=medium&per_page=15')
 data = response.json()
 ```
 
 ### JavaScript (Fetch API)
 ```javascript
-// POST method
 fetch('https://your-api.vercel.app/search', {
   method: 'POST',
   headers: {
@@ -289,7 +566,8 @@ fetch('https://your-api.vercel.app/search', {
     query: 'northern lights',
     size: 'large',
     time_range: 'month',
-    safe_search: true
+    safe_search: true,
+    per_page: 20
   })
 })
 .then(res => res.json())
@@ -301,8 +579,7 @@ fetch('https://your-api.vercel.app/search', {
   }
 });
 
-// GET method (simpler)
-fetch('https://your-api.vercel.app/search/mountains?size=large')
+fetch('https://your-api.vercel.app/search/mountains?size=large&per_page=25')
   .then(res => res.json())
   .then(data => console.log(data));
 ```
@@ -311,12 +588,12 @@ fetch('https://your-api.vercel.app/search/mountains?size=large')
 ```javascript
 const axios = require('axios');
 
-// POST method
 axios.post('https://your-api.vercel.app/search', {
   query: 'beach sunset',
   size: 'large',
   time_range: 'week',
-  safe_search: true
+  safe_search: true,
+  per_page: 30
 })
 .then(response => {
   if (response.data.success) {
@@ -324,20 +601,19 @@ axios.post('https://your-api.vercel.app/search', {
   }
 });
 
-// GET method
-axios.get('https://your-api.vercel.app/search/ocean?size=large')
+axios.get('https://your-api.vercel.app/search/ocean?size=large&per_page=15')
   .then(response => console.log(response.data));
 ```
 
 ### PHP
 ```php
 <?php
-// POST method
 $data = array(
     'query' => 'mountain peaks',
     'size' => 'large',
     'safe_search' => true,
-    'page' => 1
+    'page' => 1,
+    'per_page' => 20
 );
 
 $options = array(
@@ -358,37 +634,60 @@ if ($response->success) {
     }
 }
 
-// GET method (simpler)
-$result = file_get_contents('https://your-api.vercel.app/search/cats?size=medium');
+$result = file_get_contents('https://your-api.vercel.app/search/cats?size=medium&per_page=15');
 $response = json_decode($result);
 ?>
 ```
 
 ## Advanced Usage
 
-### Pagination
+### Multi-Page Collection
 
-Retrieve multiple pages of results:
+Collect images across multiple pages:
 ```python
 import requests
 
 query = "landscape photography"
 all_images = []
+per_page = 20
 
-for page in range(1, 4):
+for page in range(1, 6):
     response = requests.post('https://your-api.vercel.app/search', json={
         'query': query,
         'size': 'large',
-        'page': page
+        'page': page,
+        'per_page': per_page
     })
     
     data = response.json()
     if data['success']:
         all_images.extend(data['results']['images'])
+        print(f"Page {page}: {data['results']['count']} images")
     else:
         break
 
 print(f"Total images collected: {len(all_images)}")
+```
+
+### Dynamic Page Size Selection
+
+Allow users to choose their preferred page size:
+```javascript
+const pageSizes = [10, 20, 30, 50, 100];
+
+async function loadImagesWithSize(query, pageSize) {
+  const response = await fetch(
+    `https://your-api.vercel.app/search/${query}?per_page=${pageSize}`
+  );
+  const data = await response.json();
+  
+  if (data.success) {
+    console.log(`Loaded ${data.results.count} images with page size ${pageSize}`);
+    return data.results.images;
+  }
+}
+
+loadImagesWithSize('nature', 25);
 ```
 
 ### Using Proxy Mode
@@ -399,7 +698,8 @@ curl -X POST https://your-api.vercel.app/search \
   -H "Content-Type: application/json" \
   -d '{
     "query": "artwork",
-    "proxy_mode": true
+    "proxy_mode": true,
+    "per_page": 20
   }'
 ```
 
@@ -407,148 +707,16 @@ curl -X POST https://your-api.vercel.app/search \
 
 Get only recent images:
 ```javascript
-fetch('https://your-api.vercel.app/search/tech news?time_range=day')
+fetch('https://your-api.vercel.app/search/tech news?time_range=day&per_page=15')
   .then(res => res.json())
   .then(data => {
-    // Images from the last 24 hours
-    console.log(data);
+    console.log(`Got ${data.results.count} images from last 24 hours`);
   });
 ```
 
-### Combining Multiple Filters
+### Combining All Features
 ```bash
-curl "https://your-api.vercel.app/search/wallpaper?size=large&time_range=week&safe_search=true&page=1"
-```
-
-## Progressive Loading
-
-Load images gradually for a better user experience using chunked pagination or frontend animation.
-
-### Method 1: Chunked Pagination (Backend)
-
-Request images in small batches for true progressive loading:
-```bash
-# First batch (images 0-4)
-curl "https://your-api.vercel.app/search/mountains?limit=5&offset=0"
-
-# Second batch (images 5-9)
-curl "https://your-api.vercel.app/search/mountains?limit=5&offset=5"
-
-# Third batch (images 10-14)
-curl "https://your-api.vercel.app/search/mountains?limit=5&offset=10"
-```
-
-**JavaScript Example:**
-```javascript
-async function loadImagesProgressively(query) {
-    let offset = 0;
-    const limit = 5;
-    const gallery = document.getElementById('gallery');
-    
-    while (true) {
-        const response = await fetch(`/search/${query}?limit=${limit}&offset=${offset}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            // Display each image with a delay
-            for (const img of data.results.images) {
-                const imgElement = document.createElement('img');
-                imgElement.src = img.display_src;
-                imgElement.alt = img.title;
-                imgElement.className = 'fade-in';
-                gallery.appendChild(imgElement);
-                
-                // 100ms delay between each image
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            
-            // Check if there are more images
-            if (!data.pagination.has_more) break;
-            offset = data.pagination.next_offset;
-        } else {
-            break;
-        }
-    }
-}
-
-// Usage
-loadImagesProgressively('mountains');
-```
-
-**Python Example:**
-```python
-import requests
-import time
-
-def load_images_progressively(query, limit=5):
-    offset = 0
-    all_images = []
-    
-    while True:
-        response = requests.get(
-            f'https://your-api.vercel.app/search/{query}',
-            params={'limit': limit, 'offset': offset}
-        )
-        data = response.json()
-        
-        if data['success']:
-            for img in data['results']['images']:
-                print(f"Loading: {img['title']}")
-                all_images.append(img)
-                time.sleep(0.1)  # Simulate progressive loading
-            
-            if not data['pagination']['has_more']:
-                break
-            offset = data['pagination']['next_offset']
-        else:
-            break
-    
-    return all_images
-
-# Usage
-images = load_images_progressively('nature', limit=5)
-print(f"Total images loaded: {len(images)}")
-```
-
-### Method 2: Frontend Animation (Simpler)
-
-Load all images at once, but display them progressively on the frontend:
-```javascript
-fetch('/search/mountains')
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      const gallery = document.getElementById('gallery');
-      
-      data.results.images.forEach((img, index) => {
-        setTimeout(() => {
-          const imgElement = document.createElement('img');
-          imgElement.src = img.display_src;
-          imgElement.alt = img.title;
-          imgElement.className = 'fade-in';
-          gallery.appendChild(imgElement);
-        }, index * 100); // 100ms delay between each image
-      });
-    }
-  });
-```
-
-**With CSS animation:**
-```css
-.fade-in {
-  animation: fadeIn 0.5s ease-in;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+curl "https://your-api.vercel.app/search/wallpaper?size=large&time_range=week&safe_search=true&page=2&per_page=25"
 ```
 
 ## Deployment
@@ -599,7 +767,7 @@ python app.py
 5. Test the API:
 ```bash
 curl http://localhost:5000/
-curl http://localhost:5000/search/cats?size=large
+curl http://localhost:5000/search/cats?size=large&per_page=10
 ```
 
 ## Configuration
@@ -612,7 +780,6 @@ SEARX_INSTANCES = [
     "https://searx.be",
     "https://search.disroot.org",
     "https://searx.work",
-    # Add more instances here
 ]
 ```
 
@@ -620,7 +787,7 @@ SEARX_INSTANCES = [
 
 Results are cached using `lru_cache` with a maximum size of 256 entries. To adjust the cache size, modify the decorator in `app.py`:
 ```python
-@lru_cache(maxsize=256)  # Change 256 to your preferred size
+@lru_cache(maxsize=256)
 def search_images_cached(query, is_safe, size, time_range, page):
 ```
 
@@ -630,12 +797,19 @@ CORS is enabled by default for all origins. To restrict access, modify the CORS 
 ```python
 from flask_cors import CORS
 
-# Allow all origins (default)
 CORS(app)
 
-# Restrict to specific origins
 CORS(app, origins=["https://yourdomain.com", "https://anotherdomain.com"])
 ```
+
+### Pagination Limits
+
+The default pagination limit is 100 images per page. To change this, modify the validation in `app.py`:
+```python
+if per_page < 1 or per_page > 100:
+```
+
+Change `100` to your desired maximum.
 
 ## Error Handling
 
@@ -645,8 +819,8 @@ The API provides detailed error messages to help troubleshoot issues:
 ```json
 {
   "success": false,
-  "error": "Search query cannot be empty.",
-  "example": {"query": "your search term here"}
+  "error": "per_page must be between 1 and 100",
+  "provided": 150
 }
 ```
 
@@ -677,7 +851,7 @@ The API provides detailed error messages to help troubleshoot issues:
 
 The API implements intelligent caching to improve performance:
 
-- Results are cached based on query parameters
+- Results are cached based on query parameters (including page number)
 - Cache hit rate typically exceeds 80% for popular queries
 - View cache statistics at `/stats` endpoint
 - Cache automatically expires after service restart
@@ -701,10 +875,10 @@ See `requirements.txt` for specific versions.
 ## File Structure
 ```
 your-repo/
-├── app.py                 # Main application file
-├── requirements.txt       # Python dependencies
-├── vercel.json           # Vercel deployment configuration
-└── README.md             # This file
+├── app.py                 
+├── requirements.txt       
+├── vercel.json           
+└── README.md             
 ```
 
 ## Privacy and Security
@@ -766,7 +940,6 @@ limiter = Limiter(
 @app.route('/search', methods=['POST'])
 @limiter.limit("10 per minute")
 def search_for_images():
-    # ... existing code
 ```
 
 ## Troubleshooting
@@ -791,6 +964,12 @@ def search_for_images():
 - Check individual instance status
 - Try again after a few minutes
 - Consider adding more instances to the list
+
+### Pagination Not Working
+
+- Ensure `per_page` is between 1-100
+- Verify `page` is a positive integer
+- Check if the page number exceeds available pages
 
 ## Contributing
 
