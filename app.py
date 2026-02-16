@@ -1,9 +1,11 @@
 import requests
 import random
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, Response
 from flask_cors import CORS
 from functools import lru_cache
 from datetime import datetime
+import json
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -74,12 +76,65 @@ def search_images_cached(query, is_safe, size, time_range, page):
             
     return None
 
+def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mode):
+    """Generator function that yields images one at a time"""
+    image_results = search_images_cached(query, is_safe, size, time_range, page)
+    
+    if image_results is None:
+        yield f"data: {json.dumps({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable.', 'providers_attempted': len(SEARX_INSTANCES)})}\n\n"
+        return
+    
+    if not image_results:
+        yield f"data: {json.dumps({'success': False, 'error': 'No images found for this query.', 'query': query})}\n\n"
+        return
+    
+    # Send metadata first
+    metadata = {
+        'type': 'metadata',
+        'success': True,
+        'query': query,
+        'filters': {
+            'size': size,
+            'time_range': time_range,
+            'safe_search': is_safe,
+            'page': page,
+            'proxy_mode': proxy_mode
+        },
+        'total_count': len(image_results)
+    }
+    yield f"data: {json.dumps(metadata)}\n\n"
+    
+    # Stream each image one at a time
+    for index, item in enumerate(image_results):
+        if proxy_mode:
+            img_src = item['img_src']
+            if img_src.startswith('//'):
+                img_src = f"https:{img_src}"
+            item['display_src'] = f"https://ovala.vercel.app/proxy/{img_src}"
+        else:
+            item['display_src'] = item['img_src']
+        
+        image_data = {
+            'type': 'image',
+            'index': index,
+            'data': item
+        }
+        yield f"data: {json.dumps(image_data)}\n\n"
+        time.sleep(0.1)  # Small delay between images for smooth loading
+    
+    # Send completion signal
+    completion = {
+        'type': 'complete',
+        'total_sent': len(image_results)
+    }
+    yield f"data: {json.dumps(completion)}\n\n"
+
 @app.route('/', methods=['GET'])
 def index():
     return jsonify({
         'name': 'Image Search API',
-        'version': '1.0',
-        'description': 'Privacy-focused image search API powered by SearX instances. No tracking, no ads, just results.',
+        'version': '2.0',
+        'description': 'Privacy-focused image search API powered by SearX instances. Now with dynamic streaming support!',
         'documentation': 'https://github.com/yourusername/yourrepo',
         'endpoints': {
             '/': {
@@ -88,8 +143,22 @@ def index():
             },
             '/search': {
                 'method': 'POST',
-                'description': 'Search for images using JSON body',
+                'description': 'Search for images using JSON body (returns all at once)',
                 'content_type': 'application/json',
+                'body_example': {
+                    'query': 'mountains',
+                    'safe_search': True,
+                    'size': 'large',
+                    'time_range': 'week',
+                    'page': 1,
+                    'proxy_mode': False
+                }
+            },
+            '/search/stream': {
+                'method': 'POST',
+                'description': 'Search for images with streaming (loads one by one)',
+                'content_type': 'application/json',
+                'response_type': 'text/event-stream',
                 'body_example': {
                     'query': 'mountains',
                     'safe_search': True,
@@ -109,7 +178,8 @@ def index():
                     'size': 'any/large/medium/small (default: any)',
                     'time_range': 'any/day/week/month/year (default: any)',
                     'page': 'number (default: 1)',
-                    'proxy_mode': 'true/false (default: false)'
+                    'proxy_mode': 'true/false (default: false)',
+                    'stream': 'true/false (default: false) - Enable streaming mode'
                 }
             },
             '/examples': {
@@ -127,7 +197,9 @@ def index():
         },
         'quick_start': {
             'browser': 'Visit: /search/your-query',
+            'streaming': 'Visit: /search/your-query?stream=true',
             'curl': 'curl -X POST /search -H "Content-Type: application/json" -d \'{"query": "cats"}\'',
+            'curl_streaming': 'curl -X POST /search/stream -H "Content-Type: application/json" -d \'{"query": "cats"}\'',
             'python': 'requests.post(API_URL + "/search", json={"query": "cats"})',
             'javascript': 'fetch(API_URL + "/search", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({query: "cats"})})'
         },
@@ -140,7 +212,8 @@ def index():
             'Image size filtering',
             'Time range filtering',
             'Pagination support',
-            'Optional image proxy'
+            'Optional image proxy',
+            'Streaming mode for dynamic loading'
         ]
     })
 
@@ -157,16 +230,19 @@ def get_examples():
                     {
                         'name': 'Simple search',
                         'url': '/search/sunset',
+                        'streaming_url': '/search/sunset?stream=true',
                         'post_body': {'query': 'sunset'}
                     },
                     {
                         'name': 'Multi-word search',
                         'url': '/search/cute puppies',
+                        'streaming_url': '/search/cute puppies?stream=true',
                         'post_body': {'query': 'cute puppies', 'safe_search': True}
                     },
                     {
                         'name': 'Specific topic',
                         'url': '/search/mountain landscape',
+                        'streaming_url': '/search/mountain landscape?stream=true',
                         'post_body': {'query': 'mountain landscape'}
                     }
                 ]
@@ -178,16 +254,19 @@ def get_examples():
                     {
                         'name': 'Large wallpapers',
                         'url': '/search/nature wallpaper?size=large',
+                        'streaming_url': '/search/nature wallpaper?size=large&stream=true',
                         'post_body': {'query': 'nature wallpaper', 'size': 'large'}
                     },
                     {
                         'name': 'Medium photos',
                         'url': '/search/food photography?size=medium',
+                        'streaming_url': '/search/food photography?size=medium&stream=true',
                         'post_body': {'query': 'food photography', 'size': 'medium'}
                     },
                     {
                         'name': 'Small icons',
                         'url': '/search/app icons?size=small',
+                        'streaming_url': '/search/app icons?size=small&stream=true',
                         'post_body': {'query': 'app icons', 'size': 'small'}
                     }
                 ]
@@ -199,59 +278,38 @@ def get_examples():
                     {
                         'name': 'Today only',
                         'url': '/search/tech news?time_range=day',
+                        'streaming_url': '/search/tech news?time_range=day&stream=true',
                         'post_body': {'query': 'tech news', 'time_range': 'day'}
                     },
                     {
                         'name': 'This week',
                         'url': '/search/fashion trends?time_range=week',
+                        'streaming_url': '/search/fashion trends?time_range=week&stream=true',
                         'post_body': {'query': 'fashion trends', 'time_range': 'week'}
                     },
                     {
                         'name': 'This month',
                         'url': '/search/new cars?time_range=month',
+                        'streaming_url': '/search/new cars?time_range=month&stream=true',
                         'post_body': {'query': 'new cars', 'time_range': 'month'}
                     }
                 ]
             },
             {
-                'category': 'Advanced Combinations',
-                'description': 'Combine multiple filters for precise results',
+                'category': 'Streaming Mode',
+                'description': 'Dynamic loading examples',
                 'queries': [
                     {
-                        'name': 'Large recent landscapes',
-                        'url': '/search/landscape photography?size=large&time_range=week&safe_search=true',
-                        'post_body': {'query': 'landscape photography', 'size': 'large', 'time_range': 'week', 'safe_search': True}
+                        'name': 'Stream large landscapes',
+                        'url': '/search/landscape?size=large&stream=true',
+                        'post_endpoint': '/search/stream',
+                        'post_body': {'query': 'landscape', 'size': 'large'}
                     },
                     {
-                        'name': 'Medium vintage images',
-                        'url': '/search/vintage cars?size=medium&page=1',
-                        'post_body': {'query': 'vintage cars', 'size': 'medium', 'page': 1}
-                    },
-                    {
-                        'name': 'Large wallpapers from this month',
-                        'url': '/search/4k wallpaper?size=large&time_range=month&proxy_mode=false',
-                        'post_body': {'query': '4k wallpaper', 'size': 'large', 'time_range': 'month', 'proxy_mode': False}
-                    }
-                ]
-            },
-            {
-                'category': 'Pagination',
-                'description': 'Get more results with page numbers',
-                'queries': [
-                    {
-                        'name': 'First page',
-                        'url': '/search/ocean?page=1',
-                        'post_body': {'query': 'ocean', 'page': 1}
-                    },
-                    {
-                        'name': 'Second page',
-                        'url': '/search/ocean?page=2',
-                        'post_body': {'query': 'ocean', 'page': 2}
-                    },
-                    {
-                        'name': 'Third page',
-                        'url': '/search/ocean?page=3',
-                        'post_body': {'query': 'ocean', 'page': 3}
+                        'name': 'Stream wallpapers',
+                        'url': '/search/wallpaper?stream=true',
+                        'post_endpoint': '/search/stream',
+                        'post_body': {'query': 'wallpaper'}
                     }
                 ]
             }
@@ -261,7 +319,8 @@ def get_examples():
             'Combine size and time filters for precise searches',
             'Enable safe_search for family-friendly content',
             'Use pagination to browse through more results',
-            'Try different query variations if results are limited'
+            'Try different query variations if results are limited',
+            'Use stream=true parameter for dynamic loading experience'
         ]
     })
 
@@ -270,7 +329,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'Image Search API',
-        'version': '1.0',
+        'version': '2.0',
         'timestamp': datetime.utcnow().isoformat() + 'Z',
         'providers': {
             'total': len(SEARX_INSTANCES),
@@ -280,7 +339,8 @@ def health_check():
             'cache_enabled': True,
             'cors_enabled': True,
             'safe_search': True,
-            'proxy_mode': True
+            'proxy_mode': True,
+            'streaming': True
         }
     })
 
@@ -306,12 +366,65 @@ def get_stats():
             'failover': 'automatic'
         },
         'api_info': {
-            'version': '1.0',
+            'version': '2.0',
             'uptime': 'check /health for status',
             'cors': 'enabled',
+            'streaming': 'enabled',
             'rate_limiting': 'none (consider adding for production)'
         }
     })
+
+@app.route('/search/stream', methods=['POST'])
+def search_stream_post():
+    """Streaming endpoint for POST requests"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({
+            'success': False, 
+            'error': 'Invalid JSON body. Please send a valid JSON object with a "query" field.',
+            'example': {'query': 'mountains', 'safe_search': True, 'size': 'large'}
+        }), 400
+    
+    query = data.get('query')
+    is_safe = data.get('safe_search', True)
+    size = data.get('size', 'any')
+    time_range = data.get('time_range', 'any')
+    page = int(data.get('page', 1))
+    proxy_mode = data.get('proxy_mode', False)
+
+    if not query:
+        return jsonify({
+            'success': False, 
+            'error': 'Search query cannot be empty. Please provide a "query" field in your request.',
+            'example': {'query': 'your search term here'}
+        }), 400
+
+    if size not in ['any', 'large', 'medium', 'small']:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid size parameter: "{size}". Valid options: any, large, medium, small',
+            'provided': size,
+            'valid_options': ['any', 'large', 'medium', 'small']
+        }), 400
+
+    if time_range not in ['any', 'day', 'week', 'month', 'year']:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid time_range parameter: "{time_range}". Valid options: any, day, week, month, year',
+            'provided': time_range,
+            'valid_options': ['any', 'day', 'week', 'month', 'year']
+        }), 400
+
+    return Response(
+        generate_streaming_results(query, is_safe, size, time_range, page, proxy_mode),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+            'Connection': 'keep-alive'
+        }
+    )
 
 @app.route('/search', methods=['POST'])
 def search_for_images():
@@ -424,6 +537,7 @@ def search_get(query):
     time_range = request.args.get('time_range', 'any')
     page = int(request.args.get('page', 1))
     proxy_mode = request.args.get('proxy_mode', 'false').lower() == 'true'
+    stream = request.args.get('stream', 'false').lower() == 'true'
 
     if not query or query.strip() == '':
         return jsonify({
@@ -449,6 +563,19 @@ def search_get(query):
             'valid_options': ['any', 'day', 'week', 'month', 'year']
         }), 400
 
+    # If streaming is requested, use SSE
+    if stream:
+        return Response(
+            generate_streaming_results(query, safe_search, size, time_range, page, proxy_mode),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive'
+            }
+        )
+
+    # Otherwise, return all results at once
     image_results = search_images_cached(query, safe_search, size, time_range, page)
     
     if image_results is None:
@@ -521,7 +648,9 @@ def not_found(error):
         'available_endpoints': [
             '/ - API documentation',
             '/search (POST) - Search with JSON body',
+            '/search/stream (POST) - Streaming search with JSON body',
             '/search/<query> (GET) - Search with URL',
+            '/search/<query>?stream=true (GET) - Streaming search with URL',
             '/examples - View example queries',
             '/health - API health check',
             '/stats - Cache and provider statistics'
