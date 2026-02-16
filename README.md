@@ -14,6 +14,7 @@ A privacy-focused image search API powered by SearX instances. Search for images
 - Optional image proxy support
 - CORS enabled for web applications
 - User-friendly GET and POST endpoints
+- Progressive loading with chunked pagination
 - Comprehensive error handling with helpful messages
 
 ## Quick Start
@@ -36,23 +37,6 @@ curl -X POST https://your-api.vercel.app/search \
   -d '{"query": "mountains", "size": "large", "safe_search": true}'
 ```
 
-### Streaming Mode (Dynamic Loading)
-
-For a better user experience with progressive image loading:
-
-**GET with streaming:**
-```
-https://your-api.vercel.app/search/mountains?stream=true
-https://your-api.vercel.app/search/wallpaper?size=large&stream=true
-```
-
-**POST with streaming:**
-```bash
-curl -X POST https://your-api.vercel.app/search/stream \
-  -H "Content-Type: application/json" \
-  -d '{"query": "mountains", "size": "large"}'
-```
-
 ## API Endpoints
 
 ### GET `/`
@@ -73,32 +57,6 @@ https://your-api.vercel.app/
   "quick_start": { ... },
   "features": [ ... ]
 }
-```
-
-### POST `/search/stream`
-Search for images with Server-Sent Events streaming. Images load one by one for dynamic, progressive rendering.
-
-**Request Body:**
-Same as `/search` endpoint
-
-**Response Type:** `text/event-stream`
-
-**Event Types:**
-- `metadata` - Initial event with query info and total count
-- `image` - Individual image data (sent for each result)
-- `complete` - Final event indicating all images loaded
-
-**Example Response Stream:**
-```
-data: {"type":"metadata","success":true,"query":"mountains","total_count":15}
-
-data: {"type":"image","index":0,"data":{"img_src":"...","title":"...","url":"..."}}
-
-data: {"type":"image","index":1,"data":{"img_src":"...","title":"...","url":"..."}}
-
-...
-
-data: {"type":"complete","total_sent":15}
 ```
 
 ### GET `/examples`
@@ -256,6 +214,8 @@ https://your-api.vercel.app/search/ocean?size=large&time_range=week&safe_search=
 - `time_range` (optional): `any`, `day`, `week`, `month`, `year` (default: any)
 - `page` (optional): Page number (default: 1)
 - `proxy_mode` (optional): `true` or `false` (default: false)
+- `limit` (optional): Number of images to return (default: all, use with offset for chunked loading)
+- `offset` (optional): Starting position in results (default: 0, use with limit for chunked loading)
 
 **Success Response (200):**
 Same format as POST `/search` endpoint.
@@ -458,6 +418,137 @@ fetch('https://your-api.vercel.app/search/tech news?time_range=day')
 ### Combining Multiple Filters
 ```bash
 curl "https://your-api.vercel.app/search/wallpaper?size=large&time_range=week&safe_search=true&page=1"
+```
+
+## Progressive Loading
+
+Load images gradually for a better user experience using chunked pagination or frontend animation.
+
+### Method 1: Chunked Pagination (Backend)
+
+Request images in small batches for true progressive loading:
+```bash
+# First batch (images 0-4)
+curl "https://your-api.vercel.app/search/mountains?limit=5&offset=0"
+
+# Second batch (images 5-9)
+curl "https://your-api.vercel.app/search/mountains?limit=5&offset=5"
+
+# Third batch (images 10-14)
+curl "https://your-api.vercel.app/search/mountains?limit=5&offset=10"
+```
+
+**JavaScript Example:**
+```javascript
+async function loadImagesProgressively(query) {
+    let offset = 0;
+    const limit = 5;
+    const gallery = document.getElementById('gallery');
+    
+    while (true) {
+        const response = await fetch(`/search/${query}?limit=${limit}&offset=${offset}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Display each image with a delay
+            for (const img of data.results.images) {
+                const imgElement = document.createElement('img');
+                imgElement.src = img.display_src;
+                imgElement.alt = img.title;
+                imgElement.className = 'fade-in';
+                gallery.appendChild(imgElement);
+                
+                // 100ms delay between each image
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // Check if there are more images
+            if (!data.pagination.has_more) break;
+            offset = data.pagination.next_offset;
+        } else {
+            break;
+        }
+    }
+}
+
+// Usage
+loadImagesProgressively('mountains');
+```
+
+**Python Example:**
+```python
+import requests
+import time
+
+def load_images_progressively(query, limit=5):
+    offset = 0
+    all_images = []
+    
+    while True:
+        response = requests.get(
+            f'https://your-api.vercel.app/search/{query}',
+            params={'limit': limit, 'offset': offset}
+        )
+        data = response.json()
+        
+        if data['success']:
+            for img in data['results']['images']:
+                print(f"Loading: {img['title']}")
+                all_images.append(img)
+                time.sleep(0.1)  # Simulate progressive loading
+            
+            if not data['pagination']['has_more']:
+                break
+            offset = data['pagination']['next_offset']
+        else:
+            break
+    
+    return all_images
+
+# Usage
+images = load_images_progressively('nature', limit=5)
+print(f"Total images loaded: {len(images)}")
+```
+
+### Method 2: Frontend Animation (Simpler)
+
+Load all images at once, but display them progressively on the frontend:
+```javascript
+fetch('/search/mountains')
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      const gallery = document.getElementById('gallery');
+      
+      data.results.images.forEach((img, index) => {
+        setTimeout(() => {
+          const imgElement = document.createElement('img');
+          imgElement.src = img.display_src;
+          imgElement.alt = img.title;
+          imgElement.className = 'fade-in';
+          gallery.appendChild(imgElement);
+        }, index * 100); // 100ms delay between each image
+      });
+    }
+  });
+```
+
+**With CSS animation:**
+```css
+.fade-in {
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 ```
 
 ## Deployment

@@ -534,100 +534,64 @@ def search_get(query):
     time_range = request.args.get('time_range', 'any')
     page = int(request.args.get('page', 1))
     proxy_mode = request.args.get('proxy_mode', 'false').lower() == 'true'
-    stream = request.args.get('stream', 'false').lower() == 'true'
+    limit = int(request.args.get('limit', 5))
+    offset = int(request.args.get('offset', 0))
 
     if not query or query.strip() == '':
         return jsonify({
             'success': False, 
             'error': 'Search query cannot be empty.',
-            'example': '/search/mountains?size=large&safe_search=true',
-            'tip': 'Visit /examples to see more query examples'
         }), 400
-
-    if size not in ['any', 'large', 'medium', 'small']:
-        return jsonify({
-            'success': False,
-            'error': f'Invalid size parameter: "{size}". Valid options: any, large, medium, small',
-            'provided': size,
-            'valid_options': ['any', 'large', 'medium', 'small']
-        }), 400
-
-    if time_range not in ['any', 'day', 'week', 'month', 'year']:
-        return jsonify({
-            'success': False,
-            'error': f'Invalid time_range parameter: "{time_range}". Valid options: any, day, week, month, year',
-            'provided': time_range,
-            'valid_options': ['any', 'day', 'week', 'month', 'year']
-        }), 400
-
-    if stream:
-        return Response(
-            generate_streaming_results(query, safe_search, size, time_range, page, proxy_mode),
-            mimetype='text/event-stream',
-            headers={
-                'Cache-Control': 'no-cache',
-                'X-Accel-Buffering': 'no',
-                'Connection': 'keep-alive'
-            }
-        )
 
     image_results = search_images_cached(query, safe_search, size, time_range, page)
     
     if image_results is None:
-        json_response = jsonify({
+        return jsonify({
             'success': False, 
-            'error': 'Could not fetch results. All search providers are currently unavailable.',
-            'suggestion': 'Please try again in a few moments. Our system rotates through multiple providers automatically.',
-            'query': query,
-            'providers_attempted': len(SEARX_INSTANCES)
-        })
-        response = make_response(json_response, 503)
-    elif not image_results:
-        json_response = jsonify({
+            'error': 'Could not fetch results.',
+        }), 503
+    
+    if not image_results:
+        return jsonify({
             'success': False, 
-            'error': 'No images found for this query.',
-            'suggestion': 'Try different keywords, remove filters, or check a different page.',
-            'query': query,
-            'filters': {
-                'size': size,
-                'time_range': time_range,
-                'safe_search': safe_search,
-                'page': page
-            }
-        })
-        response = make_response(json_response, 404)
-    else:
-        for item in image_results:
-            if proxy_mode:
-                img_src = item['img_src']
-                if img_src.startswith('//'):
-                    img_src = f"https:{img_src}"
-                item['display_src'] = f"https://ovala.vercel.app/proxy/{img_src}"
-            else:
-                item['display_src'] = item['img_src']
+            'error': 'No images found.',
+        }), 404
+    
+    total_count = len(image_results)
+    chunked_results = image_results[offset:offset + limit]
+    
+    for item in chunked_results:
+        if proxy_mode:
+            img_src = item['img_src']
+            if img_src.startswith('//'):
+                img_src = f"https:{img_src}"
+            item['display_src'] = f"https://ovala.vercel.app/proxy/{img_src}"
+        else:
+            item['display_src'] = item['img_src']
 
-        json_response = jsonify({
-            'success': True,
-            'query': query,
-            'filters': {
-                'size': size,
-                'time_range': time_range,
-                'safe_search': safe_search,
-                'page': page,
-                'proxy_mode': proxy_mode
-            },
-            'results': {
-                'count': len(image_results),
-                'images': image_results
-            },
-            'pagination': {
-                'current_page': page,
-                'next_page': page + 1,
-                'next_page_url': f'/search/{query}?size={size}&time_range={time_range}&safe_search={str(safe_search).lower()}&page={page + 1}&proxy_mode={str(proxy_mode).lower()}'
-            }
-        })
-        response = make_response(json_response, 200)
-
+    response = jsonify({
+        'success': True,
+        'query': query,
+        'filters': {
+            'size': size,
+            'time_range': time_range,
+            'safe_search': safe_search,
+            'page': page,
+            'proxy_mode': proxy_mode
+        },
+        'results': {
+            'count': len(chunked_results),
+            'total_count': total_count,
+            'images': chunked_results
+        },
+        'pagination': {
+            'offset': offset,
+            'limit': limit,
+            'has_more': (offset + limit) < total_count,
+            'next_offset': offset + limit if (offset + limit) < total_count else None
+        }
+    })
+    
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
