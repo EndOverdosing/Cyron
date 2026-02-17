@@ -131,7 +131,7 @@ def index():
         'name': 'Image Search API',
         'version': '2.0',
         'description': 'Privacy-focused image search API powered by SearX instances with flexible pagination support',
-        'documentation': 'https://github.com/yourusername/yourrepo',
+        'documentation': 'https://github.com/endoverdosing/Cyron',
         'endpoints': {
             '/': {
                 'method': 'GET',
