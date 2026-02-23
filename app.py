@@ -2,7 +2,6 @@ import requests
 import random
 from flask import Flask, request, jsonify, make_response, Response
 from flask_cors import CORS
-from functools import lru_cache
 from datetime import datetime
 import json
 import time
@@ -24,22 +23,29 @@ SEARX_INSTANCES = [
     "https://metasearx.com"
 ]
 
-@lru_cache(maxsize=256)
+_cache = {}
+
 def search_images_cached(query, is_safe, size, time_range, page):
+    cache_key = (query, is_safe, size, time_range, page)
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    result = _do_search(query, is_safe, size, time_range, page)
+    if result is not None:
+        _cache[cache_key] = result
+    return result
+
+def _do_search(query, is_safe, size, time_range, page):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
         'Accept': 'application/json'
     }
-    
-    final_query = query
-    if ' ' in query and not (query.startswith('"') and query.endswith('"')):
-        final_query = f'"{query}"'
 
     params = {
-        'q': final_query,
+        'q': query,
         'categories': 'images',
         'format': 'json',
-        'safesearch': '0' if not is_safe else '1',
+        'safesearch': '1' if is_safe else '0',
         'pageno': page
     }
     if size != 'any':
@@ -48,17 +54,14 @@ def search_images_cached(query, is_safe, size, time_range, page):
         params['time_range'] = time_range
 
     shuffled_instances = random.sample(SEARX_INSTANCES, len(SEARX_INSTANCES))
-    
+
     for instance in shuffled_instances:
         try:
             search_url = f"{instance}/search"
-            if "metasearx.com" in instance or "searx.be" in instance:
-                search_url = instance
-            
             response = requests.get(search_url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
             data = response.json()
-            
+
             if 'results' in data and data['results']:
                 image_results = []
                 for result in data['results']:
@@ -73,20 +76,20 @@ def search_images_cached(query, is_safe, size, time_range, page):
                     return image_results
         except requests.exceptions.RequestException:
             continue
-            
+
     return None
 
 def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mode):
     image_results = search_images_cached(query, is_safe, size, time_range, page)
-    
+
     if image_results is None:
         yield f"data: {json.dumps({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable.', 'providers_attempted': len(SEARX_INSTANCES)})}\n\n"
         return
-    
+
     if not image_results:
         yield f"data: {json.dumps({'success': False, 'error': 'No images found for this query.', 'query': query})}\n\n"
         return
-    
+
     metadata = {
         'type': 'metadata',
         'success': True,
@@ -101,7 +104,7 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
         'total_count': len(image_results)
     }
     yield f"data: {json.dumps(metadata)}\n\n"
-    
+
     for index, item in enumerate(image_results):
         if proxy_mode:
             img_src = item['img_src']
@@ -110,7 +113,7 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
             item['display_src'] = f"https://ovala.vercel.app/proxy/{img_src}"
         else:
             item['display_src'] = item['img_src']
-        
+
         image_data = {
             'type': 'image',
             'index': index,
@@ -118,7 +121,7 @@ def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mod
         }
         yield f"data: {json.dumps(image_data)}\n\n"
         time.sleep(0.1)
-    
+
     completion = {
         'type': 'complete',
         'total_sent': len(image_results)
@@ -324,18 +327,11 @@ def health_check():
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
-    cache_info = search_images_cached.cache_info()
-    hit_rate = (cache_info.hits / (cache_info.hits + cache_info.misses) * 100) if (cache_info.hits + cache_info.misses) > 0 else 0
-    
     return jsonify({
         'success': True,
         'cache': {
-            'hits': cache_info.hits,
-            'misses': cache_info.misses,
-            'hit_rate': f"{hit_rate:.2f}%",
-            'current_size': cache_info.currsize,
-            'max_size': cache_info.maxsize,
-            'efficiency': 'high' if hit_rate > 50 else 'medium' if hit_rate > 25 else 'low'
+            'current_size': len(_cache),
+            'efficiency': 'manual dict cache (no eviction)'
         },
         'providers': {
             'total_instances': len(SEARX_INSTANCES),
@@ -356,14 +352,14 @@ def get_stats():
 @app.route('/search/stream', methods=['POST'])
 def search_stream_post():
     data = request.get_json()
-    
+
     if not data:
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Invalid JSON body. Please send a valid JSON object with a "query" field.',
             'example': {'query': 'mountains', 'safe_search': True, 'size': 'large'}
         }), 400
-    
+
     query = data.get('query')
     is_safe = data.get('safe_search', True)
     size = data.get('size', 'any')
@@ -373,8 +369,8 @@ def search_stream_post():
 
     if not query:
         return jsonify({
-            'success': False, 
-            'error': 'Search query cannot be empty. Please provide a "query" field in your request.',
+            'success': False,
+            'error': 'Search query cannot be empty.',
             'example': {'query': 'your search term here'}
         }), 400
 
@@ -407,14 +403,14 @@ def search_stream_post():
 @app.route('/search', methods=['POST'])
 def search_for_images():
     data = request.get_json()
-    
+
     if not data:
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Invalid JSON body. Please send a valid JSON object with a "query" field.',
             'example': {'query': 'mountains', 'safe_search': True, 'size': 'large', 'per_page': 20}
         }), 400
-    
+
     query = data.get('query')
     is_safe = data.get('safe_search', True)
     size = data.get('size', 'any')
@@ -425,8 +421,8 @@ def search_for_images():
 
     if not query:
         return jsonify({
-            'success': False, 
-            'error': 'Search query cannot be empty. Please provide a "query" field in your request.',
+            'success': False,
+            'error': 'Search query cannot be empty.',
             'example': {'query': 'your search term here'}
         }), 400
 
@@ -462,10 +458,10 @@ def search_for_images():
             }), 400
 
     image_results = search_images_cached(query, is_safe, size, time_range, page)
-    
+
     if image_results is None:
         json_response = jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Could not fetch results. All search providers are currently unavailable.',
             'suggestion': 'Please try again in a few moments.',
             'query': query,
@@ -474,7 +470,7 @@ def search_for_images():
         response = make_response(json_response, 503)
     elif not image_results:
         json_response = jsonify({
-            'success': False, 
+            'success': False,
             'error': 'No images found for this query.',
             'suggestion': 'Try different keywords, remove filters, or check a different page.',
             'query': query,
@@ -488,10 +484,10 @@ def search_for_images():
         response = make_response(json_response, 404)
     else:
         total_images = len(image_results)
-        
+
         if per_page is not None:
             image_results = image_results[:per_page]
-        
+
         for item in image_results:
             if proxy_mode:
                 img_src = item['img_src']
@@ -508,7 +504,7 @@ def search_for_images():
             'returned': len(image_results),
             'has_next': True
         }
-        
+
         if per_page is not None:
             pagination_info['next_page'] = page + 1
 
@@ -534,7 +530,7 @@ def search_for_images():
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-    
+
     return response
 
 @app.route('/search/<path:query>', methods=['GET'])
@@ -548,7 +544,7 @@ def search_get(query):
 
     if not query or query.strip() == '':
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Search query cannot be empty.',
         }), 400
 
@@ -568,24 +564,24 @@ def search_get(query):
             }), 400
 
     image_results = search_images_cached(query, safe_search, size, time_range, page)
-    
+
     if image_results is None:
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'Could not fetch results.',
         }), 503
-    
+
     if not image_results:
         return jsonify({
-            'success': False, 
+            'success': False,
             'error': 'No images found.',
         }), 404
-    
+
     total_images = len(image_results)
-    
+
     if per_page is not None:
         image_results = image_results[:per_page]
-    
+
     for item in image_results:
         if proxy_mode:
             img_src = item['img_src']
@@ -602,7 +598,7 @@ def search_get(query):
         'returned': len(image_results),
         'has_next': True
     }
-    
+
     if per_page is not None:
         pagination_info['next_page'] = page + 1
 
@@ -623,11 +619,11 @@ def search_get(query):
         },
         'pagination': pagination_info
     })
-    
+
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
-    
+
     return response
 
 @app.errorhandler(404)
