@@ -1,11 +1,14 @@
 import requests
 import random
 import time
+import logging
 from flask import Flask, request, jsonify, make_response, Response
 from flask_cors import CORS
-from functools import lru_cache
 from datetime import datetime
 import json
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
@@ -38,7 +41,8 @@ def get_instances():
     if now - _instances_cache["last_updated"] < 3600:
         return _instances_cache["instances"]
     try:
-        r = requests.get("https://searx.space/data/instances.json", timeout=5, headers=HEADERS)
+        logger.info("Refreshing instance list from searx.space...")
+        r = requests.get("https://searx.space/data/instances.json", timeout=8, headers=HEADERS)
         r.raise_for_status()
         data = r.json()
         good = []
@@ -57,18 +61,22 @@ def get_instances():
         if good:
             _instances_cache["instances"] = good
             _instances_cache["last_updated"] = now
-    except Exception:
-        pass
+            logger.info(f"Loaded {len(good)} instances from searx.space")
+        else:
+            logger.warning("searx.space returned no usable instances, keeping fallback list")
+    except Exception as e:
+        logger.warning(f"Failed to refresh instances from searx.space: {e}")
     return _instances_cache["instances"]
 
 def search_images_cached(query, is_safe, size, time_range, page):
     cache_key = (query, is_safe, size, time_range, page)
     if cache_key in _cache:
+        logger.info(f"Cache hit for query='{query}'")
         return _cache[cache_key]
-    result = _do_search(query, is_safe, size, time_range, page)
+    result, debug_log = _do_search(query, is_safe, size, time_range, page)
     if result is not None:
         _cache[cache_key] = result
-    return result
+    return result, debug_log
 
 def _do_search(query, is_safe, size, time_range, page):
     params = {
@@ -85,37 +93,99 @@ def _do_search(query, is_safe, size, time_range, page):
 
     instances = get_instances()
     shuffled = random.sample(instances, min(len(instances), 11))
+    debug_log = []
+
+    logger.info(f"Starting search: query='{query}', trying {len(shuffled)} instances")
 
     for instance in shuffled:
+        entry = {"instance": instance, "status": None, "error": None, "result_count": 0}
         try:
-            response = requests.get(f"{instance}/search", params=params, headers=HEADERS, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            if 'results' in data and data['results']:
-                image_results = []
-                for result in data['results']:
-                    if 'img_src' in result and result['img_src']:
-                        image_results.append({
-                            "img_src": result['img_src'],
-                            "url": result.get('url', '#'),
-                            "title": result.get('title', 'Untitled'),
-                        })
-                if image_results:
-                    return image_results
-        except requests.exceptions.RequestException:
-            continue
+            response = requests.get(
+                f"{instance}/search",
+                params=params,
+                headers=HEADERS,
+                timeout=10
+            )
+            entry["status"] = response.status_code
 
-    return None
+            if response.status_code != 200:
+                entry["error"] = f"HTTP {response.status_code}"
+                debug_log.append(entry)
+                logger.warning(f"  {instance} -> HTTP {response.status_code}")
+                continue
+
+            content_type = response.headers.get('Content-Type', '')
+            entry["content_type"] = content_type
+
+            if 'json' not in content_type:
+                preview = response.text[:120].replace('\n', ' ')
+                entry["error"] = f"Non-JSON response (Content-Type: {content_type}). Body preview: {preview!r}"
+                debug_log.append(entry)
+                logger.warning(f"  {instance} -> non-JSON content-type: {content_type}. Likely HTML/CAPTCHA. Preview: {preview!r}")
+                continue
+
+            try:
+                data = response.json()
+            except ValueError as e:
+                preview = response.text[:120].replace('\n', ' ')
+                entry["error"] = f"JSON parse error: {e}. Body preview: {preview!r}"
+                debug_log.append(entry)
+                logger.warning(f"  {instance} -> JSON parse failed: {e}. Preview: {preview!r}")
+                continue
+
+            if 'results' not in data:
+                entry["error"] = f"No 'results' key in response. Keys present: {list(data.keys())}"
+                debug_log.append(entry)
+                logger.warning(f"  {instance} -> missing 'results' key, got keys: {list(data.keys())}")
+                continue
+
+            image_results = []
+            for result in data['results']:
+                if 'img_src' in result and result['img_src']:
+                    image_results.append({
+                        "img_src": result['img_src'],
+                        "url": result.get('url', '#'),
+                        "title": result.get('title', 'Untitled'),
+                    })
+
+            entry["result_count"] = len(image_results)
+
+            if not image_results:
+                entry["error"] = f"0 image results (total results in response: {len(data['results'])})"
+                debug_log.append(entry)
+                logger.warning(f"  {instance} -> 0 images (total results: {len(data['results'])})")
+                continue
+
+            entry["status"] = "success"
+            debug_log.append(entry)
+            logger.info(f"  {instance} -> SUCCESS: {len(image_results)} images")
+            return image_results, debug_log
+
+        except requests.exceptions.Timeout:
+            entry["error"] = "Timeout (10s)"
+            debug_log.append(entry)
+            logger.warning(f"  {instance} -> Timeout")
+        except requests.exceptions.ConnectionError as e:
+            entry["error"] = f"Connection error: {e}"
+            debug_log.append(entry)
+            logger.warning(f"  {instance} -> Connection error: {e}")
+        except requests.exceptions.RequestException as e:
+            entry["error"] = f"Request error: {e}"
+            debug_log.append(entry)
+            logger.warning(f"  {instance} -> Request error: {e}")
+
+    logger.error(f"All instances failed for query='{query}'")
+    return None, debug_log
 
 def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mode):
-    image_results = search_images_cached(query, is_safe, size, time_range, page)
+    image_results, debug_log = search_images_cached(query, is_safe, size, time_range, page)
 
     if image_results is None:
-        yield f"data: {json.dumps({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable.'})}\n\n"
+        yield f"data: {json.dumps({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable.', 'debug': debug_log})}\n\n"
         return
 
     if not image_results:
-        yield f"data: {json.dumps({'success': False, 'error': 'No images found for this query.', 'query': query})}\n\n"
+        yield f"data: {json.dumps({'success': False, 'error': 'No images found for this query.', 'query': query, 'debug': debug_log})}\n\n"
         return
 
     yield f"data: {json.dumps({'type': 'metadata', 'success': True, 'query': query, 'filters': {'size': size, 'time_range': time_range, 'safe_search': is_safe, 'page': page, 'proxy_mode': proxy_mode}, 'total_count': len(image_results)})}\n\n"
@@ -171,7 +241,7 @@ def index():
             },
             '/examples': {'method': 'GET', 'description': 'Get example search queries'},
             '/health': {'method': 'GET', 'description': 'API health check'},
-            '/stats': {'method': 'GET', 'description': 'View cache statistics'},
+            '/stats': {'method': 'GET', 'description': 'View cache and instance statistics'},
         },
         'quick_start': {
             'browser': '/search/cats?page=1&per_page=10',
@@ -182,6 +252,7 @@ def index():
         'features': [
             'Privacy-focused (no tracking)',
             'Auto-refreshing instance list from searx.space',
+            'Per-instance debug logging on failure',
             'Multiple SearXNG instances for reliability',
             'Built-in caching for performance',
             'CORS enabled for web apps',
@@ -207,6 +278,7 @@ def get_examples():
             'Omit per_page to get all available results',
             'Use page + per_page together for pagination',
             'Page numbers start at 1',
+            'Check the "debug" field on errors to see per-instance failure reasons',
         ]
     })
 
@@ -236,7 +308,7 @@ def get_stats():
             'source': 'searx.space',
             'last_updated': datetime.utcfromtimestamp(_instances_cache['last_updated']).isoformat() + 'Z' if _instances_cache['last_updated'] else 'never',
             'rotation': 'random',
-            'failover': 'sequential',
+            'failover': 'sequential with per-instance debug logging',
         },
     })
 
@@ -341,12 +413,22 @@ def search_for_images():
     if err:
         return err
 
-    image_results = search_images_cached(query, is_safe, size, time_range, page)
+    image_results, debug_log = search_images_cached(query, is_safe, size, time_range, page)
 
     if image_results is None:
-        resp = make_response(jsonify({'success': False, 'error': 'Could not fetch results. All search providers are currently unavailable.', 'query': query}), 503)
+        resp = make_response(jsonify({
+            'success': False,
+            'error': 'Could not fetch results. All search providers are currently unavailable.',
+            'query': query,
+            'debug': debug_log,
+        }), 503)
     elif not image_results:
-        resp = make_response(jsonify({'success': False, 'error': 'No images found for this query.', 'query': query}), 404)
+        resp = make_response(jsonify({
+            'success': False,
+            'error': 'No images found for this query.',
+            'query': query,
+            'debug': debug_log,
+        }), 404)
     else:
         resp = make_response(jsonify(_build_results_response(image_results, query, size, time_range, is_safe, page, per_page, proxy_mode)), 200)
 
@@ -375,12 +457,16 @@ def search_get(query):
     if err:
         return err
 
-    image_results = search_images_cached(query, is_safe, size, time_range, page)
+    image_results, debug_log = search_images_cached(query, is_safe, size, time_range, page)
 
     if image_results is None:
-        return jsonify({'success': False, 'error': 'Could not fetch results.'}), 503
+        resp = jsonify({'success': False, 'error': 'Could not fetch results.', 'debug': debug_log})
+        resp.status_code = 503
+        return resp
     if not image_results:
-        return jsonify({'success': False, 'error': 'No images found.'}), 404
+        resp = jsonify({'success': False, 'error': 'No images found.', 'debug': debug_log})
+        resp.status_code = 404
+        return resp
 
     resp = jsonify(_build_results_response(image_results, query, size, time_range, is_safe, page, per_page, proxy_mode))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
