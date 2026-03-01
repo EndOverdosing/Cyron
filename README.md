@@ -869,6 +869,7 @@ The API implements intelligent caching to improve performance:
 - Flask
 - flask-cors
 - requests
+- beautifulsoup4
 
 See `requirements.txt` for specific versions.
 
@@ -960,7 +961,8 @@ def search_for_images():
 
 ### 503 Errors
 
-- All SearX providers may be temporarily down
+- All SearX providers may be temporarily down or blocking JSON requests
+- The API will automatically fall back to HTML scraping if JSON is unavailable
 - Check individual instance status
 - Try again after a few minutes
 - Consider adding more instances to the list

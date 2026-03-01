@@ -6,6 +6,7 @@ from functools import lru_cache
 from datetime import datetime
 import json
 import time
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 CORS(app)
@@ -27,18 +28,18 @@ SEARX_INSTANCES = [
 @lru_cache(maxsize=256)
 def search_images_cached(query, is_safe, size, time_range, page):
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
     }
-    
-    final_query = query
-    if ' ' in query and not (query.startswith('"') and query.endswith('"')):
-        final_query = f'"{query}"'
 
     params = {
-        'q': final_query,
+        'q': query,
         'categories': 'images',
-        'format': 'json',
         'safesearch': '0' if not is_safe else '1',
         'pageno': page
     }
@@ -48,32 +49,71 @@ def search_images_cached(query, is_safe, size, time_range, page):
         params['time_range'] = time_range
 
     shuffled_instances = random.sample(SEARX_INSTANCES, len(SEARX_INSTANCES))
-    
+
     for instance in shuffled_instances:
         try:
             search_url = f"{instance}/search"
-            if "metasearx.com" in instance or "searx.be" in instance:
-                search_url = instance
-            
             response = requests.get(search_url, params=params, headers=headers, timeout=15)
             response.raise_for_status()
-            data = response.json()
-            
-            if 'results' in data and data['results']:
-                image_results = []
-                for result in data['results']:
-                    if 'img_src' in result and result['img_src']:
-                        image_info = {
-                            "img_src": result['img_src'],
-                            "url": result.get('url', '#'),
-                            "title": result.get('title', 'Untitled')
-                        }
-                        image_results.append(image_info)
-                if image_results:
-                    return image_results
+
+            if 'application/json' in response.headers.get('Content-Type', ''):
+                data = response.json()
+                if 'results' in data and data['results']:
+                    image_results = []
+                    for result in data['results']:
+                        if 'img_src' in result and result['img_src']:
+                            image_results.append({
+                                "img_src": result['img_src'],
+                                "url": result.get('url', '#'),
+                                "title": result.get('title', 'Untitled')
+                            })
+                    if image_results:
+                        return image_results
+                continue
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            image_results = []
+
+            for article in soup.select('article.result-images, div.result-images, article[class*="result"]'):
+                img = article.find('img')
+                if not img:
+                    continue
+                img_src = img.get('src') or img.get('data-src') or img.get('data-lazy-src')
+                if not img_src:
+                    continue
+                if img_src.startswith('/'):
+                    img_src = instance + img_src
+                anchor = article.find('a')
+                url = anchor.get('href', '#') if anchor else '#'
+                title = article.get('data-title') or img.get('alt') or article.find('h3', 'span')
+                if hasattr(title, 'get_text'):
+                    title = title.get_text(strip=True)
+                elif not isinstance(title, str):
+                    title = 'Untitled'
+                image_results.append({
+                    "img_src": img_src,
+                    "url": url,
+                    "title": title
+                })
+
+            if not image_results:
+                for img in soup.select('img[src*="http"], img[data-src*="http"]'):
+                    src = img.get('src') or img.get('data-src', '')
+                    if any(x in src for x in ['thumb', 'preview', 'image', 'photo', 'img']):
+                        parent = img.find_parent('a')
+                        url = parent.get('href', '#') if parent else '#'
+                        image_results.append({
+                            "img_src": src,
+                            "url": url,
+                            "title": img.get('alt', 'Untitled')
+                        })
+
+            if image_results:
+                return image_results
+
         except requests.exceptions.RequestException:
             continue
-            
+
     return None
 
 def generate_streaming_results(query, is_safe, size, time_range, page, proxy_mode):
