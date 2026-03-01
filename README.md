@@ -1,3 +1,5 @@
+![Cyron Logo](/static/assets/banner.png)
+
 # Cyron Search API
 
 A privacy-focused meta search engine API powered by SearX. Returns structured results across web, images, videos, news, music, files, social media, science, and IT — with full filtering support.
