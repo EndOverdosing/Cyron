@@ -63,23 +63,32 @@ USER_AGENTS = [
 ]
 
 
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+_session_pool = {}
+
 def make_session():
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'DNT': '1',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-    })
-    return session
+    ua = random.choice(USER_AGENTS)
+    if ua not in _session_pool:
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=20,
+            pool_maxsize=50,
+            max_retries=Retry(total=0)
+        )
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        session.headers.update({
+            'User-Agent': ua,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+        })
+        _session_pool[ua] = session
+    return _session_pool[ua]
 
 
 def detect_result_type(article, categories):
@@ -214,7 +223,7 @@ def extract_date(article):
 
 
 def parse_html_results(html, instance, categories):
-    soup = BeautifulSoup(html, 'html.parser')
+    soup = BeautifulSoup(html, 'lxml')
     results = []
 
     article_selectors = [
@@ -382,8 +391,8 @@ def fetch_from_instance(instance, params, categories):
         resp = session.get(
             f"{instance}/search",
             params=params,
-            timeout=10,
-            allow_redirects=True
+            timeout=(3, 6),
+            allow_redirects=False
         )
         if resp.status_code in (429, 503, 403, 401, 302):
             return None
@@ -421,19 +430,22 @@ def execute_search(query, categories_str, engines_str, language, time_range,
     if time_range:
         params['time_range'] = time_range
 
-    instances = random.sample(SEARX_INSTANCES, len(SEARX_INSTANCES))
+    instances = random.sample(SEARX_INSTANCES, min(5, len(SEARX_INSTANCES)))
 
     with ThreadPoolExecutor(max_workers=len(instances)) as executor:
         futures = {
             executor.submit(fetch_from_instance, inst, params, tuple(categories)): inst
             for inst in instances
         }
+        result = None
         for future in as_completed(futures):
-            result = future.result()
-            if result:
-                return result
-
-    return None
+            r = future.result()
+            if r and not result:
+                result = r
+                for f in futures:
+                    f.cancel()
+                break
+        return result
 
 
 def validate_search_params(data):
@@ -585,7 +597,6 @@ def stream_search(query, params, per_page):
 
     for i, result in enumerate(results):
         yield f"data: {json.dumps({'type': 'result', 'index': i, 'data': result})}\n\n"
-        time.sleep(0.05)
 
     yield f"data: {json.dumps({'type': 'complete', 'total_sent': len(results)})}\n\n"
 
