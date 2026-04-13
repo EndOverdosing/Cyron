@@ -1,0 +1,12 @@
+{
+    "name": "cyron-search-api",
+    "version": "4.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "wrangler pages dev static --compatibility-date=2024-04-01",
+        "deploy": "wrangler pages deploy static"
+    },
+    "devDependencies": {
+        "wrangler": "^3.0.0"
+    }
+}
