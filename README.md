@@ -1,3 +1,7 @@
+
+![Cyron Search API](https://cyron.pages.dev/static/assets/banner.png)
+
+
 # Cyron Search API v4.0
 
 Cyron is a privacy-focused meta search engine API built on SearX and deployed on Cloudflare Pages + Workers. It aggregates results from multiple search engines simultaneously without storing queries, setting cookies, or serving ads. All requests are distributed across a pool of SearX instances with automatic failover, so no single provider is a point of failure. The entire API runs at the edge, keeping latency low for users worldwide.
