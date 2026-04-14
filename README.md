@@ -1,5 +1,5 @@
 
-![Cyron Search API](https://cyron.pages.dev/static/assets/banner.png)
+![Cyron Search API](https://raw.githubusercontent.com/EndOverdosing/Cyron/refs/heads/main/static/assets/banner.png)
 
 
 # Cyron Search API v4.0
